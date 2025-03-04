@@ -9,6 +9,7 @@ This is a BepInEx plugin that provides you different spectator camera tools.
 
 # Usage
 
+- All commands are toggle currently, and you will need to turn off the one you're using before switching to another.
 - `/watchpuck` - Your camera will always look at the puck, but you can still move around.
 - `/watchpuckabove` - Your camera will sit directly above the puck, but you can still move it up and down.
 - `/watchpucksmart` - Your camera will automatically shift to the closest corner of the rink that the puck is closest to. Fully autonomous.

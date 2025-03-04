@@ -60,7 +60,7 @@ public class PatchPlayerCamera
         private static float timeSinceLastTargetChange;
 
         [HarmonyPrefix]
-        public static bool Prefix(SpectatorCamera __instance)
+        public static bool Prefix(SpectatorCamera __instance, float deltaTime)
         {
             // Plugin.Log.LogInfo($"Patch: SpectatorCamera.OnTick (Postfix) was called.");
             elapsedTime += Time.deltaTime;
@@ -91,7 +91,7 @@ public class PatchPlayerCamera
             {
                 var puck = Plugin.puckManager.GetPuck();
                 if (puck != null) Plugin.spectatorCamera.transform.LookAt(puck.transform.position);
-                return true;
+                return false;
             }
 
             if (Plugin.client_spectatorWatchPuckAbove)
@@ -99,13 +99,18 @@ public class PatchPlayerCamera
                 var puck = Plugin.puckManager.GetPuck();
                 if (puck != null)
                 {
-                    var positionToSet = new Vector3(puck.transform.position.x, __instance.transform.position.y,
-                        puck.transform.position.z);
+                    Vector3 moveVector = new Vector3(__instance.moveRightAction.ReadValue<float>() - __instance.moveLeftAction.ReadValue<float>(), __instance.moveForwardAction.ReadValue<float>() - __instance.moveBackwardAction.ReadValue<float>(), (float)(__instance.jumpAction.IsPressed() ? 1 : (__instance.slideAction.IsPressed() ? (-1) : 0)));
+                    float speed = (__instance.sprintAction.IsPressed() ? (__instance.freeLookMovementSpeed * 2f) : __instance.freeLookMovementSpeed);
+                    // __instance.freeLookPosition += __instance.transform.right * moveVector.x * deltaTime * speed;
+                    // __instance.freeLookPosition += __instance.transform.up * moveVector.z * deltaTime * speed;
+                    // __instance.transform.position = Vector3.Lerp(__instance.transform.position, __instance.freeLookPosition, deltaTime / __instance.freeLookPositionSmoothing);
+                    var positionToSet = new Vector3(puck.transform.position.x, __instance.transform.position.y + moveVector.y * deltaTime * speed,
+                    puck.transform.position.z);
                     __instance.transform.SetPositionAndRotation(positionToSet, __instance.transform.rotation);
                     Plugin.spectatorCamera.transform.LookAt(puck.transform.position);
                 }
 
-                return true;
+                return false;
             }
 
             if (Plugin.client_spectatorWatchThirdPerson)
