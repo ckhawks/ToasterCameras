@@ -78,9 +78,9 @@ public class PatchPlayerCamera
 
                 if (puck != null)
                 {
-                    Plugin.Log.LogInfo("specpuck2");
+                    // Plugin.Log.LogInfo("specpuck2");
                     __instance.transform.position = puck.transform.position;
-                    Plugin.Log.LogInfo("specpuck3");
+                    // Plugin.Log.LogInfo("specpuck3");
                     __instance.transform.rotation = puck.transform.rotation;
                 }
 
@@ -91,6 +91,23 @@ public class PatchPlayerCamera
             {
                 var puck = Plugin.puckManager.GetPuck();
                 if (puck != null) Plugin.spectatorCamera.transform.LookAt(puck.transform.position);
+                bool isMouseActive = NetworkBehaviourSingleton<UIManager>.Instance.isMouseActive;
+                if (!isMouseActive)
+                {
+                    Vector3 moveVector = new Vector3(__instance.moveRightAction.ReadValue<float>() - __instance.moveLeftAction.ReadValue<float>(), __instance.moveForwardAction.ReadValue<float>() - __instance.moveBackwardAction.ReadValue<float>(), (float)(__instance.jumpAction.IsPressed() ? 1 : (__instance.slideAction.IsPressed() ? (-1) : 0)));
+                    float speed = (__instance.sprintAction.IsPressed() ? (__instance.freeLookMovementSpeed * 2f) : __instance.freeLookMovementSpeed);
+                    __instance.freeLookPosition += __instance.transform.right * moveVector.x * deltaTime * speed;
+                    __instance.freeLookPosition += __instance.transform.forward * moveVector.y * deltaTime * speed;
+                    __instance.freeLookPosition += __instance.transform.up * moveVector.z * deltaTime * speed;
+                    // Vector2 lookDelta = this.stickAction.ReadValue<Vector2>();
+                    // float mouseSensitivity = MonoBehaviourSingleton<SettingsManager>.Instance.LookSensitivity;
+                    // this.freeLookAngle += new Vector3(-lookDelta.y * mouseSensitivity, lookDelta.x * mouseSensitivity, -this.freeLookRotation.eulerAngles.z);
+                    // this.freeLookAngle.x = Mathf.Clamp(this.freeLookAngle.x, -80f, 80f);
+                    // this.freeLookRotation = Quaternion.Euler(Utils.WrapEulerAngles(this.freeLookAngle));
+                    __instance.transform.position = Vector3.Lerp(__instance.transform.position, __instance.freeLookPosition, deltaTime / __instance.freeLookPositionSmoothing);
+                    // base.transform.rotation = Quaternion.Lerp(base.transform.rotation, this.freeLookRotation, deltaTime / this.freeLookRotationSmoothing);
+                }
+                
                 return false;
             }
 
