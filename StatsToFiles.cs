@@ -135,20 +135,29 @@ public static class StatsToFiles
     }
 
     [HarmonyPatch(typeof(GameManager), nameof(GameManager.Server_GoalScoredRpc))]
-    public static class GameManagerClientOnGoalScoredRpc
+    public static class GameManagerServerGoalScoredRpc
     {
         [HarmonyPostfix]
         public static void Postfix(
             GameManager __instance, 
             PlayerTeam team, bool hasLastPlayer, ulong lastPlayerClientId, bool hasGoalPlayer, ulong goalPlayerClientId, bool hasAssistPlayer, ulong assistPlayerClientId, bool hasSecondAssistPlayer, ulong secondAssistPlayerClientId, float speedAcrossLine, float highestSpeedSinceStick, RpcParams rpcParams = null)
         {
+            Plugin.Log.LogInfo($"GameManagerServerGoalScoredRpc (Postfix) Goal scored!");
             PlayerManager playerManager = NetworkBehaviourSingleton<PlayerManager>.Instance;
+    
+            if (playerManager == null)
+            {
+                Plugin.Log.LogError($"GameManagerServerGoalScoredRpc Postfix playerManager is null");
+                return;
+            }
             
             // Write goal scorer
             if (hasGoalPlayer)
             {
-                Player player = playerManager.GetReplayPlayerByClientId(goalPlayerClientId);
+                Player player = playerManager.GetPlayerByClientId(goalPlayerClientId);
                 _ = WriteToFileAsync("goal_scorer.txt", player.Username.Value.ToString());
+                Plugin.Log.LogInfo($" - Scored by   : {player.Username.Value.ToString()}");
+                
             }
             else
             {
@@ -158,8 +167,9 @@ public static class StatsToFiles
             // Write assister
             if (hasAssistPlayer)
             {
-                Player player = playerManager.GetReplayPlayerByClientId(assistPlayerClientId);
+                Player player = playerManager.GetPlayerByClientId(assistPlayerClientId);
                 _ = WriteToFileAsync("goal_assister.txt", player.Username.Value.ToString());
+                Plugin.Log.LogInfo($" - Assisted by : {player.Username.Value.ToString()}");
             }
             else
             {
@@ -169,4 +179,80 @@ public static class StatsToFiles
             _ = WriteToFileAsync("goal_team.txt", team == PlayerTeam.Red ? "Red" : "Blue");
         }
     }
+
+    // [HarmonyPatch(typeof(UIAnnouncement), nameof(UIAnnouncement.ShowBlueTeamScoreAnnouncement))]
+    // public static class UIAnnouncementShowBlueTeamScoreAnnouncement
+    // {
+    //     [HarmonyPostfix]
+    //     public static void Postfix(
+    //         UIAnnouncement __instance,
+    //         float time,
+    //         Player goalPlayer,
+    //         Player assistPlayer,
+    //         Player secondAssistPlayer)
+    //     {
+    //         // Write goal scorer
+    //         if (goalPlayer != null)
+    //         {
+    //             _ = WriteToFileAsync("goal_scorer.txt", goalPlayer.Username.Value.ToString());
+    //         }
+    //         else
+    //         {
+    //             _ = WriteToFileAsync("goal_scorer.txt", "");
+    //         }
+    //         
+    //         // Write assister
+    //         if (assistPlayer != null)
+    //         {
+    //             _ = WriteToFileAsync("goal_assister.txt", assistPlayer.Username.Value.ToString());
+    //         }
+    //         else
+    //         {
+    //             _ = WriteToFileAsync("goal_assister.txt", "");
+    //         }
+    //         
+    //         _ = WriteToFileAsync("goal_team.txt", "Blue");
+    //     }
+    // }
+    //
+    // [HarmonyPatch(typeof(UIAnnouncement), nameof(UIAnnouncement.ShowRedTeamScoreAnnouncement))]
+    // public static class UIAnnouncementShowRedTeamScoreAnnouncement
+    // {
+    //     [HarmonyPostfix]
+    //     public static void Postfix(
+    //         UIAnnouncement __instance,
+    //         float time,
+    //         Player goalPlayer,
+    //         Player assistPlayer,
+    //         Player secondAssistPlayer)
+    //     {
+    //         // Write goal scorer
+    //         if (goalPlayer != null)
+    //         {
+    //             _ = WriteToFileAsync("goal_scorer.txt", goalPlayer.Username.Value.ToString());
+    //         }
+    //         else
+    //         {
+    //             _ = WriteToFileAsync("goal_scorer.txt", "");
+    //         }
+    //         
+    //         // Write assister
+    //         if (assistPlayer != null)
+    //         {
+    //             _ = WriteToFileAsync("goal_assister.txt", assistPlayer.Username.Value.ToString());
+    //         }
+    //         else
+    //         {
+    //             _ = WriteToFileAsync("goal_assister.txt", "");
+    //         }
+    //         
+    //         _ = WriteToFileAsync("goal_team.txt", "Red");
+    //     }
+    // }
+
+    // [Error  :Il2CppInterop] During invoking native->managed trampoline
+    // Exception: System.NullReferenceException: Object reference not set to an instance of an object.
+    // at ToasterCameras.StatsToFiles.GameManagerClientOnGoalScoredRpc.Postfix(GameManager __instance, PlayerTeam team, Boolean hasLastPlayer, UInt64 lastPlayerClientId, Boolean hasGoalPlayer, UInt64 goalPlayerClientId, Boolean hasAssistPlayer, UInt64 assistPlayerClientId, Boolean hasSecondAssistPlayer, UInt64 secondAssistPlayerClientId, Single speedAcrossLine, Single highestSpeedSinceStick, RpcParams rpcParams)
+    // at DMD<GameManager::Server_GoalScoredRpc>(GameManager this, PlayerTeam team, Boolean hasLastPlayer, UInt64 lastPlayerClientId, Boolean hasGoalPlayer, UInt64 goalPlayerClientId, Boolean hasAssistPlayer, UInt64 assistPlayerClientId, Boolean hasSecondAssistPlayer, UInt64 secondAssistPlayerClientId, Single speedAcrossLine, Single highestSpeedSinceStick, RpcParams rpcParams)
+    // at (il2cpp -> managed) Server_GoalScoredRpc(IntPtr , PlayerTeam , Byte , UInt64 , Byte , UInt64 , Byte , UInt64 , Byte , UInt64 , Single , Single , IntPtr , Il2CppMethodInfo* )
 }
