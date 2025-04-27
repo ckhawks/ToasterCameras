@@ -47,5 +47,6 @@ public class Plugin : BasePlugin
         {
             Log.LogInfo($" - {method.DeclaringType.FullName}.{method.Name}");
         }
+        StatsToFiles.Setup();
     }
 }

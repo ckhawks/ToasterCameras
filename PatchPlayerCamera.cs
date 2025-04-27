@@ -50,8 +50,9 @@ public class PatchPlayerCamera
         private static bool isMoving;
         public static Vector3 targetPos = Vector3.zero;
         public static readonly float duration = 6.0f;
-        private static readonly float iceWidth = 18.75f;
-        private static readonly float iceLength = 38.12f;
+        static LevelManager lm = NetworkBehaviourSingleton<LevelManager>.Instance;
+        private static readonly float iceWidth = lm.IceBounds.extents.x;
+        private static readonly float iceLength = lm.IceBounds.extents.z;
         private static readonly float longPosition = iceLength - 5;
         private static readonly float height = 6;
         private static readonly float widthPosition = iceWidth - 3;
@@ -65,6 +66,8 @@ public class PatchPlayerCamera
             // Plugin.Log.LogInfo($"Patch: SpectatorCamera.OnTick (Postfix) was called.");
             elapsedTime += Time.deltaTime;
             Plugin.spectatorCamera = __instance;
+            InputManager im = MonoBehaviourSingleton<InputManager>.Instance;
+            
             if (Plugin.client_spectatorIsPuck)
             {
                 // Il2CppReferenceArray<Object> pucks = FindAllPucks();
@@ -94,8 +97,9 @@ public class PatchPlayerCamera
                 bool isMouseActive = NetworkBehaviourSingleton<UIManager>.Instance.isMouseActive;
                 if (!isMouseActive)
                 {
-                    Vector3 moveVector = new Vector3(__instance.moveRightAction.ReadValue<float>() - __instance.moveLeftAction.ReadValue<float>(), __instance.moveForwardAction.ReadValue<float>() - __instance.moveBackwardAction.ReadValue<float>(), (float)(__instance.jumpAction.IsPressed() ? 1 : (__instance.slideAction.IsPressed() ? (-1) : 0)));
-                    float speed = (__instance.sprintAction.IsPressed() ? (__instance.freeLookMovementSpeed * 2f) : __instance.freeLookMovementSpeed);
+                    
+                    Vector3 moveVector = new Vector3(im.TurnRightAction.ReadValue<float>() - im.TurnLeftAction.ReadValue<float>(), im.MoveForwardAction.ReadValue<float>() - im.MoveBackwardAction.ReadValue<float>(), (float)(im.JumpAction.IsPressed() ? 1 : (im.SlideAction.IsPressed() ? (-1) : 0)));
+                    float speed = (im.SprintAction.IsPressed() ? (__instance.freeLookMovementSpeed * 2f) : __instance.freeLookMovementSpeed);
                     __instance.freeLookPosition += __instance.transform.right * moveVector.x * deltaTime * speed;
                     __instance.freeLookPosition += __instance.transform.forward * moveVector.y * deltaTime * speed;
                     __instance.freeLookPosition += __instance.transform.up * moveVector.z * deltaTime * speed;
@@ -116,8 +120,8 @@ public class PatchPlayerCamera
                 var puck = Plugin.puckManager.GetPuck();
                 if (puck != null)
                 {
-                    Vector3 moveVector = new Vector3(__instance.moveRightAction.ReadValue<float>() - __instance.moveLeftAction.ReadValue<float>(), __instance.moveForwardAction.ReadValue<float>() - __instance.moveBackwardAction.ReadValue<float>(), (float)(__instance.jumpAction.IsPressed() ? 1 : (__instance.slideAction.IsPressed() ? (-1) : 0)));
-                    float speed = (__instance.sprintAction.IsPressed() ? (__instance.freeLookMovementSpeed * 2f) : __instance.freeLookMovementSpeed);
+                    Vector3 moveVector = new Vector3(im.TurnRightAction.ReadValue<float>() - im.TurnLeftAction.ReadValue<float>(), im.MoveForwardAction.ReadValue<float>() - im.MoveBackwardAction.ReadValue<float>(), (float)(im.JumpAction.IsPressed() ? 1 : (im.SlideAction.IsPressed() ? (-1) : 0)));
+                    float speed = (im.SprintAction.IsPressed() ? (__instance.freeLookMovementSpeed * 2f) : __instance.freeLookMovementSpeed);
                     // __instance.freeLookPosition += __instance.transform.right * moveVector.x * deltaTime * speed;
                     // __instance.freeLookPosition += __instance.transform.up * moveVector.z * deltaTime * speed;
                     // __instance.transform.position = Vector3.Lerp(__instance.transform.position, __instance.freeLookPosition, deltaTime / __instance.freeLookPositionSmoothing);
@@ -135,15 +139,15 @@ public class PatchPlayerCamera
                 var offset = new Vector3(0, 3, -2);
                 var smoothSpeed = 10f;
                 if (Plugin.thirdPersonPlayerToWatch == null) return true;
-                var desiredPosition = Plugin.thirdPersonPlayerToWatch.playerBody.transform.position +
-                                      Plugin.thirdPersonPlayerToWatch.playerBody.transform.TransformDirection(offset);
+                var desiredPosition = Plugin.thirdPersonPlayerToWatch.PlayerBody.transform.position +
+                                      Plugin.thirdPersonPlayerToWatch.PlayerBody.transform.TransformDirection(offset);
                 __instance.transform.position = Vector3.Lerp(__instance.transform.position, desiredPosition,
                     smoothSpeed * Time.deltaTime);
                 // Vector3 positionToSet = new Vector3(player.transform.position.x, __instance.transform.position.y,
                 //     puck.transform.position.z);
                 // __instance.transform.SetPositionAndRotation(positionToSet, __instance.transform.rotation);
-                Plugin.spectatorCamera.transform.LookAt(Plugin.thirdPersonPlayerToWatch.playerBody.transform.position +
-                                                        Plugin.thirdPersonPlayerToWatch.playerBody.transform
+                Plugin.spectatorCamera.transform.LookAt(Plugin.thirdPersonPlayerToWatch.PlayerBody.transform.position +
+                                                        Plugin.thirdPersonPlayerToWatch.PlayerBody.transform
                                                             .TransformDirection(new Vector3(0, 0, 2)));
                 return false;
             }
