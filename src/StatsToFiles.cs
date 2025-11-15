@@ -2,7 +2,6 @@
 using System.IO;
 using System.Threading.Tasks;
 using HarmonyLib;
-using ToasterConnectWhileFull;
 using Unity.Netcode;
 
 namespace ToasterCameras;

@@ -2,11 +2,11 @@
 using System.Collections.Generic;
 using System.Linq;
 using HarmonyLib;
-using ToasterCameras;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
 
-namespace ToasterConnectWhileFull;
+namespace ToasterCameras;
 
 public class Plugin : IPuckMod
 {
@@ -23,8 +23,26 @@ public class Plugin : IPuckMod
     public static bool client_spectatorWatchPuckSmart = false;
     public static bool client_spectatorWatchPuckSmart2 = false;
     public static bool client_spectatorWatchThirdPerson = false;
+    public static bool client_spectatorStaticPositioning = false;
+    public static string client_spectatorStaticPosition = "";
+    public static bool client_cinematicSmoothingEnabled = false;
+    public static InputAction cinematicSmoothingAction;
+    // Cinematic smoothing state
+    public static Vector3 _currentCinematicRotation = Vector3.zero; // Stores the smoothed rotation
+    public static Vector3 _currentCinematicPosition = Vector3.zero; // Stores the smoothed position
+    public static Vector3 _cinematicRotationVelocity = Vector3.zero; // For SmoothDamp rotational velocity
+    public static Vector3 _cinematicPositionVelocity = Vector3.zero; // For SmoothDamp positional velocity
     public static Player thirdPersonPlayerToWatch = null;
     public static SpectatorCamera spectatorCamera;
+    public static ModSettings modSettings;
+    public static InputAction[] cameraPositionActions;
+    public static InputAction becomePuckAction;
+    public static InputAction watchPuckAction;
+    public static InputAction watchPuckAboveAction;
+    public static InputAction watchPuckSmartAction;
+    public static InputAction watchPuckSmart2Action;
+    public static InputAction watchOffAction;
+    public static InputAction slowDownAction; // Add this line
     
     public bool OnEnable()
     {
@@ -42,8 +60,14 @@ public class Plugin : IPuckMod
                 harmony.PatchAll();
                 LogAllPatchedMethods();
                 StatsToFiles.Setup();
+                modSettings = ModSettings.Load();
+                modSettings.Save();
+                // Dump keybinds for user reference
+                KeybindDumper.DumpAllKeybinds();
+                CameraKeybinds.InitializeCameraPositionKeybinds();
+                CameraKeybinds.InitializeCameraModeKeybinds();
+                CameraKeybinds.InitializePlayerWatchKeybinds();
             }
-
             
             Plugin.Log($"Enabled!");
             return true;

@@ -1,7 +1,8 @@
-﻿using System;
+﻿// ClientChat.cs
+
+using System;
 using System.Linq;
 using HarmonyLib;
-using ToasterConnectWhileFull;
 using UnityEngine;
 
 namespace ToasterCameras;
@@ -16,6 +17,8 @@ public static class ClientChat
         Plugin.client_spectatorIsPuck = false;
         Plugin.client_spectatorWatchPuckAbove = false;
         Plugin.client_spectatorWatchPuckSmart2 = false;
+        Plugin.client_spectatorStaticPositioning = false;
+        Plugin.client_spectatorStaticPosition = "";
     }
     
     [HarmonyPatch(typeof(UIChat), nameof(UIChat.Client_SendClientChatMessage))]
@@ -127,6 +130,35 @@ public static class ClientChat
             if (messageParts[0].Equals("/watchoff", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/wo", StringComparison.OrdinalIgnoreCase))
             {
                 DisableAllCameraModes();
+                return false;
+            }
+
+            if (messageParts[0].Equals("/cpos", StringComparison.OrdinalIgnoreCase))
+            {
+                // if they haven't provided the arguments
+                if (messageParts.Length < 2)
+                {
+                    __instance.AddChatMessage($"You must say what position you would like the camera to move to. /cpos [position]");
+                    return false;
+                }
+
+                // if they don't provide the right arguments
+                if (!Plugin.modSettings.cameraPositions.ContainsKey(messageParts[1].ToLower()))
+                {
+                    __instance.AddChatMessage($"That is not a valid static camera position. Options: {string.Join(" ", Plugin.modSettings.cameraPositions.Keys.ToList())}");
+                    return false;
+                }
+                
+                DisableAllCameraModes();
+                Plugin.client_spectatorStaticPosition = messageParts[1].ToLower();
+                Plugin.client_spectatorStaticPositioning = true;
+                return false;
+            }
+
+            if (messageParts[0].Equals("/where", StringComparison.OrdinalIgnoreCase))
+            {
+                PatchPlayerCamera.PrintCameraCoordinates();
+                return false;
             }
             
             return true;
