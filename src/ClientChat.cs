@@ -1,4 +1,4 @@
-﻿// ClientChat.cs
+// ClientChat.cs
 
 using System;
 using System.Linq;
@@ -20,28 +20,31 @@ public static class ClientChat
         Plugin.client_spectatorStaticPositioning = false;
         Plugin.client_spectatorStaticPosition = "";
     }
-    
-    [HarmonyPatch(typeof(UIChat), nameof(UIChat.Client_SendClientChatMessage))]
-    private class PatchUIChatClientSendClientChatMessage
+
+    // In b312 chat sending moved out of UIChat onto ChatManager.
+    // Signature: Client_SendChatMessage(string content, bool isQuickChat, bool isTeamChat)
+    [HarmonyPatch(typeof(ChatManager), nameof(ChatManager.Client_SendChatMessage))]
+    private class PatchChatManagerClientSendChatMessage
     {
         [HarmonyPrefix]
-        private static bool Prefix(UIChat __instance, string message)
+        private static bool Prefix(ChatManager __instance, string content, bool isQuickChat, bool isTeamChat)
         {
-            // Plugin.Log($"Patch: UIChat.Client_SendClientChatMessage (Prefix) was called.");
-            string[] messageParts = message.Split(' ');
+            // Don't intercept quick chats here — let them flow through.
+            if (isQuickChat) return true;
+
+            if (string.IsNullOrEmpty(content)) return true;
+            string[] messageParts = content.Split(' ');
 
             if (messageParts[0].Equals("/becomepuck", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/bep", StringComparison.OrdinalIgnoreCase))
             {
                 DisableAllCameraModes();
                 Plugin.client_spectatorIsPuck = true;
-                // Reparent the spectator camera to the puck
-                Plugin.spectatorCamera.transform.SetParent(PuckManager.Instance.GetPuck().transform);
-
-                // Optionally reset the local position and rotation of the camera relative to the puck
-                Plugin.spectatorCamera.transform.localPosition = Vector3.zero; // Center the camera on the puck
-                Plugin.spectatorCamera.transform.localRotation =
-                    Quaternion.identity; // Align the camera's rotation with the puck
-
+                if (Plugin.spectatorCamera != null && PuckManager.Instance != null && PuckManager.Instance.GetPuck() != null)
+                {
+                    Plugin.spectatorCamera.transform.SetParent(PuckManager.Instance.GetPuck().transform);
+                    Plugin.spectatorCamera.transform.localPosition = Vector3.zero;
+                    Plugin.spectatorCamera.transform.localRotation = Quaternion.identity;
+                }
                 return false;
             }
 
@@ -56,20 +59,23 @@ public static class ClientChat
             {
                 DisableAllCameraModes();
                 Plugin.client_spectatorWatchPuckAbove = true;
+                return false;
             }
 
             if (messageParts[0].Equals("/watchpucksmart", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/wps", StringComparison.OrdinalIgnoreCase))
             {
                 DisableAllCameraModes();
                 Plugin.client_spectatorWatchPuckSmart = true;
+                return false;
             }
-            
+
             if (messageParts[0].Equals("/watchpucksmart2", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/wps2", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/wpss", StringComparison.OrdinalIgnoreCase))
             {
                 DisableAllCameraModes();
                 Plugin.client_spectatorWatchPuckSmart2 = true;
+                return false;
             }
-            
+
             if (messageParts[0].Equals("/watchplayer", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/wpl", StringComparison.OrdinalIgnoreCase))
             {
                 if (messageParts.Length >= 2)
@@ -91,7 +97,6 @@ public static class ClientChat
                         if (playerByNumber != null)
                         {
                             playerToWatch = playerByNumber;
-
                         }
                     }
 
@@ -104,10 +109,9 @@ public static class ClientChat
                         }
                     }
 
-                    // If it's still null
                     if (playerToWatch == null)
                     {
-                        __instance.AddChatMessage(
+                        ChatHelper.AddSystemMessage(
                             $"<s>-></s> <size=16><color=red>Could not find a user to watch with <b>{string.Join(" ", messageParts.Skip(1))}</b>.</color></size>");
                         return false;
                     }
@@ -115,16 +119,17 @@ public static class ClientChat
                     DisableAllCameraModes();
                     Plugin.thirdPersonPlayerToWatch = playerToWatch;
                     Plugin.client_spectatorWatchThirdPerson = true;
-                    return true;
+                    return false;
                 }
-                
+
                 if (Plugin.client_spectatorWatchThirdPerson == false)
                 {
-                    __instance.AddChatMessage(
+                    ChatHelper.AddSystemMessage(
                         $"<s>-></s> <size=16><color=red>Please specify a <b>name</b> or <b>number</b>.</color></size>");
                     return false;
                 }
                 Plugin.client_spectatorWatchThirdPerson = false;
+                return false;
             }
 
             if (messageParts[0].Equals("/watchoff", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/wo", StringComparison.OrdinalIgnoreCase))
@@ -135,20 +140,18 @@ public static class ClientChat
 
             if (messageParts[0].Equals("/cpos", StringComparison.OrdinalIgnoreCase))
             {
-                // if they haven't provided the arguments
                 if (messageParts.Length < 2)
                 {
-                    __instance.AddChatMessage($"You must say what position you would like the camera to move to. /cpos [position]");
+                    ChatHelper.AddSystemMessage("You must say what position you would like the camera to move to. /cpos [position]");
                     return false;
                 }
 
-                // if they don't provide the right arguments
                 if (!Plugin.modSettings.cameraPositions.ContainsKey(messageParts[1].ToLower()))
                 {
-                    __instance.AddChatMessage($"That is not a valid static camera position. Options: {string.Join(" ", Plugin.modSettings.cameraPositions.Keys.ToList())}");
+                    ChatHelper.AddSystemMessage($"That is not a valid static camera position. Options: {string.Join(" ", Plugin.modSettings.cameraPositions.Keys.ToList())}");
                     return false;
                 }
-                
+
                 DisableAllCameraModes();
                 Plugin.client_spectatorStaticPosition = messageParts[1].ToLower();
                 Plugin.client_spectatorStaticPositioning = true;
@@ -160,7 +163,7 @@ public static class ClientChat
                 PatchPlayerCamera.PrintCameraCoordinates();
                 return false;
             }
-            
+
             return true;
         }
     }

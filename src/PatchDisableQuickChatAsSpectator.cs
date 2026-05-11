@@ -1,45 +1,30 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 
 namespace ToasterCameras;
 
 public static class PatchDisableQuickChatAsSpectator
 {
-    // [HarmonyPatch(typeof(PlayerInput), "Update")]
-    // class PatchPlayerInputUpdate
-    // {
-    //     [HarmonyPrefix]
-    //     static bool Prefix(PlayerInput __instance)
-    //     {
-    //         if (Plugin.modSettings.disableQuickChatsInSpectator)
-    //         {
-    //             // if the player is currently in spectator mode
-    //             PlayerManager pm = PlayerManager.Instance;
-    //             if (pm.GetLocalPlayer().Team.Value != PlayerTeam.Blue || pm.GetLocalPlayer().Team.Value != PlayerTeam.Red)
-    //             {
-    //                 Plugin.Log($"Ignroing quick");
-    //                 return false;
-    //             }
-    //         }
-    //
-    //         return true;
-    //     }
-    // }
-
-    [HarmonyPatch(typeof(UIChat), nameof(UIChat.OpenQuickChat))]
-    class PatchDisableQuickChatAsSpectatorInner
+    // In b312 there's no UIChat.OpenQuickChat; quick chats flow through
+    // ChatManager.Client_SendChatMessage with isQuickChat=true.
+    [HarmonyPatch(typeof(ChatManager), nameof(ChatManager.Client_SendChatMessage))]
+    private class PatchChatManagerClientSendChatMessageQuick
     {
         [HarmonyPrefix]
-        static bool Prefix(UIChat __instance)
+        private static bool Prefix(string content, bool isQuickChat, bool isTeamChat)
         {
-            if (Plugin.modSettings.disableQuickChatsInSpectator)
+            if (!isQuickChat) return true;
+            if (Plugin.modSettings == null || !Plugin.modSettings.disableQuickChatsInSpectator) return true;
+
+            PlayerManager pm = PlayerManager.Instance;
+            if (pm == null) return true;
+
+            var local = pm.GetLocalPlayer();
+            if (local == null) return true;
+
+            if (local.Team != PlayerTeam.Blue && local.Team != PlayerTeam.Red)
             {
-                // if the player is currently in spectator mode
-                PlayerManager pm = PlayerManager.Instance;
-                if (pm.GetLocalPlayer().Team.Value != PlayerTeam.Blue && pm.GetLocalPlayer().Team.Value != PlayerTeam.Red)
-                {
-                    Plugin.Log($"Ignroing quick chat input because is in spectator");
-                    return false;
-                }
+                Plugin.Log("Ignoring quick chat because local player is in spectator");
+                return false;
             }
 
             return true;

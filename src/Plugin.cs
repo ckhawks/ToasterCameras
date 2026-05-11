@@ -8,7 +8,7 @@ using UnityEngine.Rendering;
 
 namespace ToasterCameras;
 
-public class Plugin : IPuckMod
+public class Plugin : IPuckPlugin
 {
     public static string MOD_NAME = "ToasterCameras";
     public static string MOD_VERSION = "1.0.0";
