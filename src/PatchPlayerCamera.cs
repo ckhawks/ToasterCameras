@@ -25,7 +25,7 @@ public static class PatchPlayerCamera
     private static Level _cachedLevel;
     private static Level GetLevel()
     {
-        if (_cachedLevel == null) _cachedLevel = Object.FindObjectOfType<Level>();
+        if (_cachedLevel == null) _cachedLevel = Object.FindFirstObjectByType<Level>();
         return _cachedLevel;
     }
 
@@ -53,11 +53,111 @@ public static class PatchPlayerCamera
         private static readonly float cooldownTime = 3.0f;
         private static float timeSinceLastTargetChange;
 
+        // Grid-track mode state: angular velocity (deg/sec) for momentum-based tracking.
+        private static float gridYawVel;
+        private static float gridPitchVel;
+
+        // The point the camera should watch, plus the velocity to use for lead.
+        private struct WatchTarget
+        {
+            public bool HasTarget;
+            public Vector3 Position;
+            public Vector3 Velocity;
+            public int Count;
+        }
+
+        // PuckManager.GetPuck() returns the *first-spawned* puck. During warmup
+        // the game spawns many pucks, so that's an arbitrary stray off to the
+        // side — and as pucks despawn/respawn across the warmup→play transition
+        // the "first" one keeps changing, snapping the camera. Instead, frame the
+        // centroid of all live pucks (with averaged velocity for the lead): in
+        // warmup the camera watches the middle of the action, and as the warmup
+        // pucks despawn the centroid glides smoothly to the single game puck. A
+        // single puck reduces to that puck exactly. Falls back to replay pucks
+        // (e.g. goal replays) when there are no live pucks.
+        private static WatchTarget GetWatchTarget()
+        {
+            var result = new WatchTarget();
+            var pm = PuckManager.Instance;
+            if (pm == null) return result;
+
+            var pucks = pm.GetPucks();
+            if (pucks == null || pucks.Count == 0) pucks = pm.GetReplayPucks();
+            if (pucks == null || pucks.Count == 0) return result;
+
+            var sumPos = Vector3.zero;
+            var sumVel = Vector3.zero;
+            var n = 0;
+            foreach (var puck in pucks)
+            {
+                if (puck == null) continue; // skip destroyed-but-not-yet-removed
+                sumPos += puck.transform.position;
+                if (puck.SynchronizedObject != null)
+                    sumVel += puck.SynchronizedObject.PredictedLinearVelocity;
+                n++;
+            }
+
+            if (n == 0) return result;
+            result.HasTarget = true;
+            result.Count = n;
+            result.Position = sumPos / n;
+            result.Velocity = sumVel / n;
+            return result;
+        }
+
         [HarmonyPrefix]
         public static bool Prefix(SpectatorCamera __instance, float deltaTime)
         {
             elapsedTime += Time.deltaTime;
             Plugin.spectatorCamera = __instance;
+
+            // Dynamic FOV: scale FOV with camera→puck distance. Far = zoomed in
+            // (narrow), close = zoomed out (wide), smoothed so it never snaps.
+            // BaseCamera.UnityCamera is the spectator's own Camera component;
+            // fall back through child + Camera.main in case it's null on b323.
+            var fovCam = __instance.UnityCamera;
+            if (fovCam == null) fovCam = __instance.GetComponentInChildren<Camera>();
+            if (fovCam == null) fovCam = Camera.main;
+            if (fovCam != null)
+            {
+                if (Plugin._dynamicFovOriginal < 0f)
+                    Plugin._dynamicFovOriginal = fovCam.fieldOfView;
+
+                if (Plugin.client_dynamicFovEnabled)
+                {
+                    var target = GetWatchTarget();
+                    if (target.HasTarget)
+                    {
+                        var dist = Vector3.Distance(__instance.transform.position, target.Position);
+                        var t = Mathf.InverseLerp(Plugin.dynamicFovNearDistance, Plugin.dynamicFovFarDistance, dist);
+                        var targetFov = Mathf.Lerp(Plugin.dynamicFovNearFov, Plugin.dynamicFovFarFov, t);
+                        Plugin._dynamicFovCurrent = Mathf.SmoothDamp(fovCam.fieldOfView, targetFov,
+                            ref Plugin._dynamicFovVel, Plugin.dynamicFovSmoothTime, Mathf.Infinity, Time.deltaTime);
+                        fovCam.fieldOfView = Plugin._dynamicFovCurrent;
+                    }
+                }
+                else if (Plugin._dynamicFovOriginal > 0f &&
+                         Mathf.Abs(fovCam.fieldOfView - Plugin._dynamicFovOriginal) > 0.01f)
+                {
+                    fovCam.fieldOfView = Mathf.SmoothDamp(fovCam.fieldOfView,
+                        Plugin._dynamicFovOriginal, ref Plugin._dynamicFovVel, Plugin.dynamicFovSmoothTime,
+                        Mathf.Infinity, Time.deltaTime);
+                }
+            }
+
+            // Guard: if local player is no longer a spectator (e.g. respawned for
+            // GamePhase.Faceoff onto Blue/Red), don't apply spectator-only camera
+            // overrides. Stale flags would otherwise lock the camera to puck-relative
+            // positions/rotations and ignore the game's normal player-follow logic.
+            var pm = PlayerManager.Instance;
+            var localPlayer = pm != null ? pm.GetLocalPlayer() : null;
+            if (localPlayer != null &&
+                (localPlayer.Team == PlayerTeam.Blue || localPlayer.Team == PlayerTeam.Red))
+            {
+                if (__instance.transform.parent != null)
+                    __instance.transform.SetParent(null);
+                return true;
+            }
 
             if (Plugin.client_spectatorIsPuck)
             {
@@ -118,6 +218,143 @@ public static class PatchPlayerCamera
                     _positionField.SetValue(__instance, freeLookPosition);
                     __instance.transform.position = Vector3.Lerp(__instance.transform.position, freeLookPosition,
                         deltaTime / Mathf.Max(freeLookPositionSmoothing, 0.0001f));
+                }
+
+                return false;
+            }
+
+            if (Plugin.client_spectatorWatchPuckGrid)
+            {
+                // Free movement (same controls as /wp) is always available, with
+                // or without a puck.
+                var isMouseActive = GlobalStateManager.UIState.IsMouseRequired;
+                if (!isMouseActive)
+                {
+                    var moveVector = new Vector3(
+                        InputManager.TurnRightAction.ReadValue<float>() - InputManager.TurnLeftAction.ReadValue<float>(),
+                        InputManager.MoveForwardAction.ReadValue<float>() - InputManager.MoveBackwardAction.ReadValue<float>(),
+                        InputManager.JumpAction.IsPressed() ? 1 : InputManager.SlideAction.IsPressed() ? -1 : 0);
+                    var isSprinting = InputManager.SprintAction.IsPressed();
+                    var isSlowingDown = Plugin.slowDownAction != null && Plugin.slowDownAction.IsPressed();
+
+                    var speedMultiplier = 1f;
+                    if (isSprinting)
+                        speedMultiplier = 2f;
+                    else if (isSlowingDown)
+                        speedMultiplier = 0.25f;
+
+                    var speed = freeLookMovementSpeedDefault * speedMultiplier;
+                    freeLookPosition += __instance.transform.right * moveVector.x * deltaTime * speed;
+                    freeLookPosition += __instance.transform.forward * moveVector.y * deltaTime * speed;
+                    freeLookPosition += __instance.transform.up * moveVector.z * deltaTime * speed;
+                    _positionField.SetValue(__instance, freeLookPosition);
+                    __instance.transform.position = Vector3.Lerp(__instance.transform.position, freeLookPosition,
+                        deltaTime / Mathf.Max(freeLookPositionSmoothing, 0.0001f));
+                }
+
+                // Aim target. We frame the *lead point* — where the action will be
+                // in N seconds based on its horizontal velocity — instead of the
+                // current spot, so the area being moved into gets the breathing
+                // room in frame. The target is the centroid of all live pucks (see
+                // GetWatchTarget); with one puck that's just the puck. With no
+                // pucks on the ice, fall back to a fixed point above center ice.
+                Vector3 aimTarget;
+                var target = GetWatchTarget();
+                if (target.HasTarget)
+                {
+                    var rawVel = target.Velocity;
+                    rawVel.y = 0f;
+                    // Exponential smoothing on the velocity vector so the lead
+                    // doesn't snap on bounces / network jitter.
+                    var alpha = 1f - Mathf.Exp(-deltaTime * Plugin.watchPuckGridLeadVelocitySmoothing);
+                    Plugin.watchPuckGridSmoothedVelocity = Vector3.Lerp(
+                        Plugin.watchPuckGridSmoothedVelocity, rawVel, alpha);
+                    var puckPos = target.Position;
+                    var leadPos = puckPos + Plugin.watchPuckGridSmoothedVelocity * Plugin.watchPuckGridLeadSeconds;
+
+                    // Clamp the lead so the puck never gets pushed outside the
+                    // center cell of the framing grid. Constraint: the angle
+                    // between (camera→puck) and (camera→lead) must be ≤ the cap.
+                    var camPos = __instance.transform.position;
+                    var camToPuck = puckPos - camPos;
+                    var camToLead = leadPos - camPos;
+                    if (camToPuck.sqrMagnitude > 0.01f && camToLead.sqrMagnitude > 0.01f)
+                    {
+                        var angle = Vector3.Angle(camToPuck, camToLead);
+                        if (angle > Plugin.watchPuckGridMaxLeadAngleDeg && angle > 0.001f)
+                        {
+                            var t = Plugin.watchPuckGridMaxLeadAngleDeg / angle;
+                            leadPos = Vector3.Lerp(puckPos, leadPos, t);
+                        }
+                    }
+                    aimTarget = leadPos;
+                }
+                else
+                {
+                    aimTarget = new Vector3(0f, 2f, 0f);
+                    Plugin.watchPuckGridSmoothedVelocity = Vector3.zero;
+                }
+
+                var toTarget = aimTarget - __instance.transform.position;
+                if (toTarget.sqrMagnitude > 0.0001f)
+                {
+                    // Decompose the aim direction into yaw/pitch with atan2 rather
+                    // than Quaternion.LookRotation(...).eulerAngles. The euler
+                    // decomposition is discontinuous at the vertical singularity:
+                    // when the aim direction passes near straight-down (a high
+                    // camera with the puck beneath it, or — between plays, with no
+                    // live puck — the center-ice fallback below the camera) Unity
+                    // flips the extracted yaw by ~180° and pushes pitch past 90°.
+                    // SmoothDampAngle then swings the camera to that bogus heading
+                    // for a few frames before it snaps back. atan2 stays continuous.
+                    var current = __instance.transform.rotation.eulerAngles;
+
+                    var horizDist = Mathf.Sqrt(toTarget.x * toTarget.x + toTarget.z * toTarget.z);
+
+                    // Yaw is undefined when the target is directly above/below;
+                    // hold the current yaw through that degenerate window.
+                    float targetYaw;
+                    if (horizDist > 0.001f)
+                        targetYaw = Mathf.Atan2(toTarget.x, toTarget.z) * Mathf.Rad2Deg;
+                    else
+                        targetYaw = current.y;
+
+                    // Pitch: positive = looking down (matches Unity's euler.x).
+                    var targetPitch = Mathf.Atan2(-toTarget.y, horizDist) * Mathf.Rad2Deg;
+                    targetPitch = Mathf.Max(targetPitch, -Plugin.watchPuckGridMaxLookUpDeg);
+
+                    var toCenter = -__instance.transform.position; // rink center is (0,0,0)
+                    toCenter.y = 0f;
+                    if (toCenter.sqrMagnitude > 25f) // > 5m from center
+                    {
+                        var centerYaw = Mathf.Atan2(toCenter.x, toCenter.z) * Mathf.Rad2Deg;
+                        var delta = Mathf.DeltaAngle(centerYaw, targetYaw);
+                        delta = Mathf.Clamp(delta, -Plugin.watchPuckGridYawDeviationDeg,
+                            Plugin.watchPuckGridYawDeviationDeg);
+                        targetYaw = centerYaw + delta;
+                    }
+
+                    var viewportInside = true;
+                    var gridCam = __instance.GetComponentInChildren<Camera>();
+                    if (gridCam == null) gridCam = Camera.main;
+                    if (gridCam != null)
+                    {
+                        var viewport = gridCam.WorldToViewportPoint(aimTarget);
+                        const float minEdge = 1f / 3f;
+                        const float maxEdge = 2f / 3f;
+                        viewportInside = viewport.z > 0f &&
+                                         viewport.x >= minEdge && viewport.x <= maxEdge &&
+                                         viewport.y >= minEdge && viewport.y <= maxEdge;
+                    }
+
+                    var smoothTime = viewportInside ? 1.2f : 0.8f;
+
+                    var newPitch = Mathf.SmoothDampAngle(current.x, targetPitch, ref gridPitchVel, smoothTime,
+                        Mathf.Infinity, deltaTime);
+                    var newYaw = Mathf.SmoothDampAngle(current.y, targetYaw, ref gridYawVel, smoothTime,
+                        Mathf.Infinity, deltaTime);
+
+                    __instance.transform.rotation = Quaternion.Euler(newPitch, newYaw, 0f);
                 }
 
                 return false;
@@ -312,6 +549,7 @@ public static class PatchPlayerCamera
             var isAnyOtherModeActive =
                 Plugin.client_spectatorIsPuck ||
                 Plugin.client_spectatorWatchPuck ||
+                Plugin.client_spectatorWatchPuckGrid ||
                 Plugin.client_spectatorWatchPuckAbove ||
                 Plugin.client_spectatorWatchThirdPerson ||
                 Plugin.client_spectatorWatchPuckSmart ||
