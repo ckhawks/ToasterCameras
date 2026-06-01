@@ -34,6 +34,11 @@ public class CinematicSettings
     public float positionSmoothingFactor { get; set; } = 0.1f;
 }
 
+public class PossessionCircleSettings
+{
+    public float opacity { get; set; } = 0.75f;   // disc alpha, 0..1
+}
+
 // Player order goes C->LW->RW->LD->RD->G, but if one of those is missing they shift down. 6 always selects the G?
 public class PlayerKeybinds
 {
@@ -74,6 +79,7 @@ public class ModSettings
     public CameraModeKeybinds cameraModes { get; set; } = new CameraModeKeybinds();
     public TeamKeybinds watchPlayer { get; set; } = new TeamKeybinds();
     public CinematicSettings cinematicSettings { get; set; } = new CinematicSettings();
+    public PossessionCircleSettings possessionCircle { get; set; } = new PossessionCircleSettings();
     public bool disableQuickChatsInSpectator { get; set; } = true;
     
     static string ConfigurationFileName = $"{Plugin.MOD_NAME}.json";

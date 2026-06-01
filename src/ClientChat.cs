@@ -12,6 +12,7 @@ public static class ClientChat
     private static void DisableAllCameraModes()
     {
         Plugin.client_spectatorWatchPuck = false;
+        Plugin.client_spectatorWatchPuckGrid = false;
         Plugin.client_spectatorWatchPuckSmart = false;
         Plugin.client_spectatorWatchThirdPerson = false;
         Plugin.client_spectatorIsPuck = false;
@@ -19,6 +20,9 @@ public static class ClientChat
         Plugin.client_spectatorWatchPuckSmart2 = false;
         Plugin.client_spectatorStaticPositioning = false;
         Plugin.client_spectatorStaticPosition = "";
+
+        if (Plugin.spectatorCamera != null && Plugin.spectatorCamera.transform.parent != null)
+            Plugin.spectatorCamera.transform.SetParent(null);
     }
 
     // In b312 chat sending moved out of UIChat onto ChatManager.
@@ -52,6 +56,13 @@ public static class ClientChat
             {
                 DisableAllCameraModes();
                 Plugin.client_spectatorWatchPuck = true;
+                return false;
+            }
+
+            if (messageParts[0].Equals("/watchpuckgrid", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/wpg", StringComparison.OrdinalIgnoreCase))
+            {
+                DisableAllCameraModes();
+                Plugin.client_spectatorWatchPuckGrid = true;
                 return false;
             }
 
@@ -155,6 +166,63 @@ public static class ClientChat
                 DisableAllCameraModes();
                 Plugin.client_spectatorStaticPosition = messageParts[1].ToLower();
                 Plugin.client_spectatorStaticPositioning = true;
+                return false;
+            }
+
+            if (messageParts[0].Equals("/beam", StringComparison.OrdinalIgnoreCase))
+            {
+                PuckBeam.enabled = !PuckBeam.enabled;
+                if (!PuckBeam.enabled)
+                {
+                    if (PuckManager.Instance != null)
+                        foreach (var p in PuckManager.Instance.GetPucks(false))
+                            PuckBeam.Cleanup(p);
+                }
+                ChatHelper.AddSystemMessage(
+                    $"<s>-></s> Puck beam {(PuckBeam.enabled ? "<color=green>enabled</color>" : "<color=red>disabled</color>")}.");
+                return false;
+            }
+
+            if (messageParts[0].Equals("/dfov", StringComparison.OrdinalIgnoreCase) ||
+                messageParts[0].Equals("/dynamicfov", StringComparison.OrdinalIgnoreCase))
+            {
+                Plugin.client_dynamicFovEnabled = !Plugin.client_dynamicFovEnabled;
+                ChatHelper.AddSystemMessage(
+                    $"<s>-></s> Dynamic FOV {(Plugin.client_dynamicFovEnabled ? "<color=green>enabled</color>" : "<color=red>disabled</color>")}.");
+                return false;
+            }
+
+            if (messageParts[0].Equals("/circleopacity", StringComparison.OrdinalIgnoreCase) ||
+                messageParts[0].Equals("/copacity", StringComparison.OrdinalIgnoreCase))
+            {
+                if (messageParts.Length < 2 ||
+                    !float.TryParse(messageParts[1], out var op))
+                {
+                    ChatHelper.AddSystemMessage(
+                        $"<s>-></s> Possession circle opacity is <b>{PuckPossessionIndicator.opacity:0.00}</b>. Usage: /circleopacity [0-1]");
+                    return false;
+                }
+
+                PuckPossessionIndicator.opacity = Mathf.Clamp01(op);
+                if (Plugin.modSettings != null)
+                {
+                    Plugin.modSettings.possessionCircle ??= new PossessionCircleSettings();
+                    Plugin.modSettings.possessionCircle.opacity = PuckPossessionIndicator.opacity;
+                    Plugin.modSettings.Save();
+                }
+                ChatHelper.AddSystemMessage(
+                    $"<s>-></s> Possession circle opacity set to <b>{PuckPossessionIndicator.opacity:0.00}</b> (saved).");
+                return false;
+            }
+
+            if (messageParts[0].Equals("/zoom", StringComparison.OrdinalIgnoreCase) ||
+                messageParts[0].Equals("/scrollzoom", StringComparison.OrdinalIgnoreCase))
+            {
+                Plugin.client_scrollZoomEnabled = !Plugin.client_scrollZoomEnabled;
+                if (Plugin.client_scrollZoomEnabled)
+                    Plugin.scrollZoomNeedsInit = true;
+                ChatHelper.AddSystemMessage(
+                    $"<s>-></s> Scroll-wheel zoom {(Plugin.client_scrollZoomEnabled ? "<color=green>enabled</color> — use the mouse wheel to zoom" : "<color=red>disabled</color>")}.");
                 return false;
             }
 

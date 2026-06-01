@@ -19,6 +19,50 @@ public class Plugin : IPuckPlugin
     public static List<PlayerCamera> becomePuckPlayerCameras = new List<PlayerCamera>();
     public static bool client_spectatorIsPuck = false;
     public static bool client_spectatorWatchPuck = false;
+    public static bool client_spectatorWatchPuckGrid = false;
+    // /wpg rotation clamps. Pitch.x in Unity is positive when looking down, so the
+    // "max look-up" clamp is expressed as a negative pitch floor (e.g. -15 means
+    // the camera can tilt up to 15° above horizontal but no further).
+    public static float watchPuckGridMaxLookUpDeg = 15f;
+    public static float watchPuckGridYawDeviationDeg = 75f;
+    // /wpg leads the camera to where the puck is going. The aim point is the
+    // puck's current position projected forward by the puck's horizontal
+    // velocity over this many seconds — so the area in front of the puck
+    // gets framed instead of the puck itself.
+    public static float watchPuckGridLeadSeconds = 1.5f;
+    // Exponential smoothing factor (per second) for the velocity used to
+    // compute the lead point. Higher = reacts faster, more twitchy on bounces;
+    // lower = laggier but steadier framing. ~3-5 feels right.
+    public static float watchPuckGridLeadVelocitySmoothing = 2f;
+    // Maximum angular separation (in degrees, from the camera) between the puck
+    // and the lead aim point. Caps how far the lead can push so the puck itself
+    // doesn't get pushed outside the center cell of the 3x3 framing grid. A
+    // value near ~half of the center cell's angular size in the current FOV
+    // (≈ vertical FOV / 6) works well; 10° is a safe default for ~60° FOV.
+    public static float watchPuckGridMaxLeadAngleDeg = 10f;
+    public static Vector3 watchPuckGridSmoothedVelocity = Vector3.zero;
+    public static bool client_dynamicFovEnabled = false;
+    // Dynamic FOV bounds (degrees) and distance bounds (meters from camera to puck).
+    public static float dynamicFovNearFov = 70f;
+    public static float dynamicFovFarFov = 24f;
+    public static float dynamicFovNearDistance = 4f;
+    public static float dynamicFovFarDistance = 55f;
+    public static float dynamicFovSmoothTime = 0.35f;
+    public static float _dynamicFovCurrent = 60f;
+    public static float _dynamicFovVel;
+    public static float _dynamicFovOriginal = -1f;
+    // Scroll-wheel zoom: optional manual FOV control. When enabled, the mouse
+    // wheel nudges scrollZoomTargetFov (scroll up = zoom in = smaller FOV) and
+    // the camera smooth-damps toward it. Independent of dynamic FOV; when both
+    // are toggled on, scroll zoom takes precedence. scrollZoomNeedsInit makes
+    // the target seed from the live FOV the first tick after it's enabled.
+    public static bool client_scrollZoomEnabled = false;
+    public static bool scrollZoomNeedsInit = false;
+    public static float scrollZoomTargetFov = 60f;
+    public static float scrollZoomStep = 4f;   // degrees per wheel notch
+    public static float scrollZoomMinFov = 15f;
+    public static float scrollZoomMaxFov = 90f;
+    public static float scrollZoomSmoothTime = 0.12f;
     public static bool client_spectatorWatchPuckAbove = false;
     public static bool client_spectatorWatchPuckSmart = false;
     public static bool client_spectatorWatchPuckSmart2 = false;
@@ -62,11 +106,22 @@ public class Plugin : IPuckPlugin
                 StatsToFiles.Setup();
                 modSettings = ModSettings.Load();
                 modSettings.Save();
+                if (modSettings.possessionCircle != null)
+                    PuckPossessionIndicator.opacity = Mathf.Clamp01(modSettings.possessionCircle.opacity);
                 // Dump keybinds for user reference
                 KeybindDumper.DumpAllKeybinds();
                 CameraKeybinds.InitializeCameraPositionKeybinds();
                 CameraKeybinds.InitializeCameraModeKeybinds();
                 CameraKeybinds.InitializePlayerWatchKeybinds();
+
+                // Hidden GameObject that drives PuckPossessionIndicator each frame.
+                // FixedUpdate would only fire at the physics rate (and only on the
+                // server for puck physics), so a regular Update is what gives smooth
+                // visuals on clients.
+                var runnerGo = new GameObject("ToasterCamerasIndicatorRunner");
+                runnerGo.hideFlags = HideFlags.HideAndDontSave;
+                UnityEngine.Object.DontDestroyOnLoad(runnerGo);
+                runnerGo.AddComponent<PuckIndicatorRunner>();
             }
             
             Plugin.Log($"Enabled!");

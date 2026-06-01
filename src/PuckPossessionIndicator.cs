@@ -1,11 +1,12 @@
 // PuckPossessionIndicator.cs
 //
 // Ports the old BepInEx "puck possession circle" feature to b323. Each live puck
-// gets a flat cylinder pinned to the ice directly beneath it. The cylinder is
-// recolored on stick contact to the toucher's team color, and fades back to
-// neutral gray after a fixed duration. Radius shrinks with puck height so it
-// stays roughly puck-sized at table height and never blocks the puck visually
-// when the puck is on the deck.
+// gets a flat filled disc (a triangle-fan mesh) pinned to the ice directly
+// beneath it — like the game's puck-elevation indicator circle rather than a
+// solid cylinder. The disc is recolored on stick contact to the toucher's team
+// color, and fades back to neutral gray after a fixed duration. Radius shrinks
+// with puck height so it stays roughly puck-sized at table height and never
+// blocks the puck visually when the puck is on the deck.
 //
 // Important: the client doesn't simulate puck physics, so Unity's OnCollisionEnter
 // never fires for the puck on a client. We instead poll the puck's
@@ -23,12 +24,26 @@ public static class PuckPossessionIndicator
 {
     public static bool enabled = true;
     public static float maxRadius = 0.4f;
-    public static float thickness = 0.005f;
+    public static float opacity = 0.75f;   // disc alpha, 0 (invisible) .. 1 (opaque)
     public static float possessionDurationSeconds = 5f;
     public static float smallestFactor = 0.2f;
     public static float maxHeightForSmallest = 18f;
+    // Number of segments around the rim. More = smoother circle.
+    private const int DiscSegments = 48;
 
-    private static readonly Dictionary<Puck, GameObject> indicatorMap = new();
+    // Per-puck visual: the disc mesh plus a cached color buffer/last-applied
+    // color so the every-frame recolor only re-uploads mesh colors when the
+    // team actually changes.
+    private class Indicator
+    {
+        public GameObject go;
+        public Mesh mesh;
+        public Color[] colors;
+        public Color applied;
+        public bool hasApplied;
+    }
+
+    private static readonly Dictionary<Puck, Indicator> indicatorMap = new();
     private static readonly Dictionary<Puck, float> lastTouchTime = new();
     // Highest collision Time we've already reacted to per puck — used to detect
     // new entries in the synced NetworkObjectCollisionRecorder buffer.
@@ -44,57 +59,99 @@ public static class PuckPossessionIndicator
         return lastTouchTeamMap.TryGetValue(puck, out var team) ? team : PlayerTeam.None;
     }
 
-    private static Material sourceMaterial;
+    private static Shader spritesShader;
+    private static Material discMaterial;
 
-    private static Material GetSourceMaterial()
+    // One material shared across every disc. Per-disc color lives in the mesh's
+    // vertex colors, not the material, so a single shared material is safe — and
+    // it lets Unity dynamically batch the discs into far fewer draw calls when
+    // there are many pucks on the ice.
+    private static Material GetDiscMaterial()
     {
-        if (sourceMaterial != null) return sourceMaterial;
-        foreach (var renderer in Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None))
+        if (discMaterial != null) return discMaterial;
+        if (spritesShader == null) spritesShader = Shader.Find("Sprites/Default");
+        discMaterial = new Material(spritesShader);
+        return discMaterial;
+    }
+
+    // Shared geometry for a unit disc (radius 1) in the local XZ plane. Reused to
+    // build each puck's mesh; only the per-puck vertex colors differ.
+    private static Vector3[] discVerts;
+    private static int[] discTris;
+
+    private static void BuildDiscGeometry()
+    {
+        if (discVerts != null) return;
+
+        // Center vertex + one vertex per rim point.
+        discVerts = new Vector3[DiscSegments + 1];
+        discVerts[0] = Vector3.zero;
+        for (var i = 0; i < DiscSegments; i++)
         {
-            if (renderer == null) continue;
-            var n = renderer.gameObject.name;
-            if (n == "Barrier Top Border" || n == "Barrier Bottom Border")
-            {
-                sourceMaterial = renderer.sharedMaterial;
-                break;
-            }
+            var a = (i / (float)DiscSegments) * Mathf.PI * 2f;
+            discVerts[i + 1] = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
         }
-        return sourceMaterial;
+
+        // Triangle fan: (center, rim[i], rim[i+1]). Sprites/Default has Cull Off
+        // so the disc is visible from both sides regardless of winding.
+        discTris = new int[DiscSegments * 3];
+        for (var i = 0; i < DiscSegments; i++)
+        {
+            discTris[i * 3] = 0;
+            discTris[i * 3 + 1] = i + 1;
+            discTris[i * 3 + 2] = (i + 1) % DiscSegments + 1;
+        }
     }
 
-    private static GameObject CreateIndicator(Puck puck)
+    private static Indicator CreateIndicator(Puck puck)
     {
-        var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        Object.Destroy(go.GetComponent<Collider>());
-        go.name = $"PuckPossessionIndicator_{puck.GetInstanceID()}";
+        BuildDiscGeometry();
 
-        var rend = go.GetComponent<Renderer>();
-        var src = GetSourceMaterial();
-        if (src != null)
-            rend.material = new Material(src);
-        rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        rend.receiveShadows = false;
+        var go = new GameObject($"PuckPossessionIndicator_{puck.GetInstanceID()}");
 
-        SetColor(rend.material, PlayerTeam.None);
-        go.transform.localScale = new Vector3(maxRadius * 2f, thickness, maxRadius * 2f);
-        return go;
+        var mesh = new Mesh { name = "PuckPossessionDisc" };
+        mesh.vertices = discVerts;
+        mesh.triangles = discTris;
+        // No normals/UVs: the sprites shader is unlit and samples its default
+        // white texture, so vertex color alone drives the look — fewer vertex
+        // attributes also keeps the mesh eligible for dynamic batching.
+
+        var mf = go.AddComponent<MeshFilter>();
+        mf.sharedMesh = mesh;
+
+        var mr = go.AddComponent<MeshRenderer>();
+        mr.sharedMaterial = GetDiscMaterial();
+        mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        mr.receiveShadows = false;
+
+        var ind = new Indicator
+        {
+            go = go,
+            mesh = mesh,
+            colors = new Color[discVerts.Length]
+        };
+        SetColor(ind, PlayerTeam.None);
+        return ind;
     }
 
-    private static void SetColor(Material mat, PlayerTeam team)
+    private static void SetColor(Indicator ind, PlayerTeam team)
     {
-        if (mat == null) return;
+        if (ind == null) return;
+
         Color c;
         if (team == PlayerTeam.Blue || team == PlayerTeam.Red)
-        {
             c = TRLBridge.GetTeamColor(team);
-            c.a = 0.5f;
-        }
         else
-        {
             c = Color.gray;
-            c.a = 0.5f;
-        }
-        mat.color = c;
+        c.a = Mathf.Clamp01(opacity);
+
+        // Skip the mesh upload when the color hasn't changed.
+        if (ind.hasApplied && ind.applied == c) return;
+
+        for (var i = 0; i < ind.colors.Length; i++) ind.colors[i] = c;
+        ind.mesh.colors = ind.colors;
+        ind.applied = c;
+        ind.hasApplied = true;
     }
 
     public static void Tick(Puck puck)
@@ -102,34 +159,37 @@ public static class PuckPossessionIndicator
         if (!enabled || puck == null) return;
         if (puck.IsReplay != null && puck.IsReplay.Value) return;
 
-        if (!indicatorMap.TryGetValue(puck, out var indicator) || indicator == null)
+        if (!indicatorMap.TryGetValue(puck, out var ind) || ind == null || ind.go == null)
         {
-            indicator = CreateIndicator(puck);
-            indicatorMap[puck] = indicator;
+            ind = CreateIndicator(puck);
+            indicatorMap[puck] = ind;
             lastTouchTime[puck] = -possessionDurationSeconds;
             lastSeenCollisionTime[puck] = -1f;
         }
 
+        var t = ind.go.transform;
         var pos = puck.transform.position;
         pos.y = 0.005f;
-        indicator.transform.position = pos;
-        indicator.transform.rotation = Quaternion.identity;
+        t.position = pos;
+        // The disc lies in the local XZ plane, so identity rotation keeps it
+        // flat on the ice.
 
         var h = Mathf.Max(0f, puck.transform.position.y);
         var scale = Mathf.Clamp(1f - h * (1f / maxHeightForSmallest), smallestFactor, 1f);
-        indicator.transform.localScale = new Vector3(maxRadius * 2f * scale, thickness, maxRadius * 2f * scale);
+        var radius = maxRadius * scale;
+        t.localScale = new Vector3(radius, 1f, radius);
 
-        PollCollisions(puck, indicator);
+        PollCollisions(puck, ind);
 
-        var rend = indicator.GetComponent<Renderer>();
-        // Re-apply color every frame so TRL color/toggle changes take effect live.
+        // Re-apply color every frame so TRL color/toggle changes take effect live
+        // (SetColor no-ops when the color is unchanged, so this is cheap).
         var activeTeam = Time.time - lastTouchTime[puck] > possessionDurationSeconds
             ? PlayerTeam.None
-            : (lastTouchTeamMap.TryGetValue(puck, out var t) ? t : PlayerTeam.None);
-        SetColor(rend.material, activeTeam);
+            : (lastTouchTeamMap.TryGetValue(puck, out var team) ? team : PlayerTeam.None);
+        SetColor(ind, activeTeam);
     }
 
-    private static void PollCollisions(Puck puck, GameObject indicator)
+    private static void PollCollisions(Puck puck, Indicator ind)
     {
         if (puck.NetworkObjectCollisionRecorder == null) return;
 
@@ -147,7 +207,7 @@ public static class PuckPossessionIndicator
         if (latest.Value > prev && latest.Key != null)
         {
             lastSeenCollisionTime[puck] = latest.Value;
-            SetColor(indicator.GetComponent<Renderer>().material, latest.Key.Team);
+            SetColor(ind, latest.Key.Team);
             lastTouchTime[puck] = Time.time;
             lastTouchTeamMap[puck] = latest.Key.Team;
         }
@@ -156,7 +216,11 @@ public static class PuckPossessionIndicator
     public static void Cleanup(Puck puck)
     {
         if (puck == null) return;
-        if (indicatorMap.TryGetValue(puck, out var go) && go != null) Object.Destroy(go);
+        if (indicatorMap.TryGetValue(puck, out var ind) && ind != null)
+        {
+            if (ind.go != null) Object.Destroy(ind.go);
+            if (ind.mesh != null) Object.Destroy(ind.mesh);
+        }
         indicatorMap.Remove(puck);
         lastTouchTime.Remove(puck);
         lastSeenCollisionTime.Remove(puck);

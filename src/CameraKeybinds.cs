@@ -360,6 +360,9 @@ public static class CameraKeybinds
             Plugin.client_spectatorWatchPuckSmart2 = false;
             Plugin.client_spectatorStaticPositioning = false;
             Plugin.client_spectatorStaticPosition = "";
+
+            if (Plugin.spectatorCamera != null && Plugin.spectatorCamera.transform.parent != null)
+                Plugin.spectatorCamera.transform.SetParent(null);
         }
     }
 }

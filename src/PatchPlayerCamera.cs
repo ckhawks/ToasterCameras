@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace ToasterCameras;
 
@@ -56,6 +57,9 @@ public static class PatchPlayerCamera
         // Grid-track mode state: angular velocity (deg/sec) for momentum-based tracking.
         private static float gridYawVel;
         private static float gridPitchVel;
+
+        // TEMP /wpg diagnostic: throttle so we log at most ~1/sec.
+        private static float gridDiagTimer;
 
         // The point the camera should watch, plus the velocity to use for lead.
         private struct WatchTarget
@@ -123,7 +127,36 @@ public static class PatchPlayerCamera
                 if (Plugin._dynamicFovOriginal < 0f)
                     Plugin._dynamicFovOriginal = fovCam.fieldOfView;
 
-                if (Plugin.client_dynamicFovEnabled)
+                if (Plugin.client_scrollZoomEnabled)
+                {
+                    // Seed the target from the current FOV the first tick after
+                    // enabling, so zoom starts where the view currently is.
+                    if (Plugin.scrollZoomNeedsInit)
+                    {
+                        Plugin.scrollZoomTargetFov = Mathf.Clamp(fovCam.fieldOfView,
+                            Plugin.scrollZoomMinFov, Plugin.scrollZoomMaxFov);
+                        Plugin.scrollZoomNeedsInit = false;
+                    }
+
+                    // Ignore the wheel while a menu/chat wants the mouse, so
+                    // scrolling UI doesn't also zoom the camera.
+                    if (!GlobalStateManager.UIState.IsMouseRequired && Mouse.current != null)
+                    {
+                        var scrollY = Mouse.current.scroll.ReadValue().y;
+                        if (Mathf.Abs(scrollY) > 0.01f)
+                            // Sign only: wheel delta magnitude is platform-dependent
+                            // (e.g. 120/notch on Windows), so step a fixed amount.
+                            Plugin.scrollZoomTargetFov = Mathf.Clamp(
+                                Plugin.scrollZoomTargetFov - Mathf.Sign(scrollY) * Plugin.scrollZoomStep,
+                                Plugin.scrollZoomMinFov, Plugin.scrollZoomMaxFov);
+                    }
+
+                    Plugin._dynamicFovCurrent = Mathf.SmoothDamp(fovCam.fieldOfView,
+                        Plugin.scrollZoomTargetFov, ref Plugin._dynamicFovVel,
+                        Plugin.scrollZoomSmoothTime, Mathf.Infinity, Time.deltaTime);
+                    fovCam.fieldOfView = Plugin._dynamicFovCurrent;
+                }
+                else if (Plugin.client_dynamicFovEnabled)
                 {
                     var target = GetWatchTarget();
                     if (target.HasTarget)
@@ -323,15 +356,42 @@ public static class PatchPlayerCamera
                     var targetPitch = Mathf.Atan2(-toTarget.y, horizDist) * Mathf.Rad2Deg;
                     targetPitch = Mathf.Max(targetPitch, -Plugin.watchPuckGridMaxLookUpDeg);
 
+                    // TEMP diagnostic: remember the unclamped heading and whether
+                    // the center clamp actually moved it.
+                    var diagRawYaw = targetYaw;
+                    var diagCenterYaw = float.NaN;
+                    var diagClampEngaged = false;
+
                     var toCenter = -__instance.transform.position; // rink center is (0,0,0)
                     toCenter.y = 0f;
                     if (toCenter.sqrMagnitude > 25f) // > 5m from center
                     {
                         var centerYaw = Mathf.Atan2(toCenter.x, toCenter.z) * Mathf.Rad2Deg;
                         var delta = Mathf.DeltaAngle(centerYaw, targetYaw);
-                        delta = Mathf.Clamp(delta, -Plugin.watchPuckGridYawDeviationDeg,
+                        var clampedDelta = Mathf.Clamp(delta, -Plugin.watchPuckGridYawDeviationDeg,
                             Plugin.watchPuckGridYawDeviationDeg);
-                        targetYaw = centerYaw + delta;
+                        targetYaw = centerYaw + clampedDelta;
+                        diagCenterYaw = centerYaw;
+                        diagClampEngaged = !Mathf.Approximately(delta, clampedDelta);
+                    }
+
+                    // TEMP /wpg diagnostic: ~1/sec, report how many pucks are actually
+                    // detected (live vs replay) plus the raw→clamped yaw, so we can
+                    // confirm there's really one puck and see if the center clamp is
+                    // what's pulling the camera off the puck. Remove once diagnosed.
+                    gridDiagTimer += deltaTime;
+                    if (gridDiagTimer >= 1f)
+                    {
+                        gridDiagTimer = 0f;
+                        var pmDiag = PuckManager.Instance;
+                        var liveDiag = pmDiag != null ? pmDiag.GetPucks() : null;
+                        var replayDiag = pmDiag != null ? pmDiag.GetReplayPucks() : null;
+                        var liveCount = liveDiag != null ? liveDiag.Count : -1;
+                        var replayCount = replayDiag != null ? replayDiag.Count : -1;
+                        Plugin.Log(
+                            $"/wpg diag: live={liveCount} replay={replayCount} targetCount={target.Count} " +
+                            $"aim={aimTarget} rawYaw={diagRawYaw:F1} centerYaw={diagCenterYaw:F1} " +
+                            $"clampedYaw={targetYaw:F1} clampEngaged={diagClampEngaged} camPos={__instance.transform.position}");
                     }
 
                     var viewportInside = true;
