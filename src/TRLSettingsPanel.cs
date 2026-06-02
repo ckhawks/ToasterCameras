@@ -11,6 +11,7 @@
 using System;
 using System.Reflection;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 
 namespace ToasterCameras;
@@ -105,7 +106,40 @@ public static class TRLSettingsPanel
         });
 
         Separator(root);
+        Header(root, "Features");
+        Note(root, "Saved across restarts. Equivalent to /beam, /dfov and /zoom.");
+
+        Toggle(root, "Puck beam", PuckBeam.enabled, v =>
+        {
+            PuckBeam.enabled = v;
+            if (!v && PuckManager.Instance != null)
+                foreach (var p in PuckManager.Instance.GetPucks(false))
+                    PuckBeam.Cleanup(p);
+            s.puckBeamEnabled = v;
+            s.Save();
+        });
+        Toggle(root, "Dynamic FOV", Plugin.client_dynamicFovEnabled, v =>
+        {
+            Plugin.client_dynamicFovEnabled = v;
+            s.dynamicFovEnabled = v;
+            s.Save();
+        });
+        Toggle(root, "Scroll-wheel zoom", Plugin.client_scrollZoomEnabled, v =>
+        {
+            Plugin.client_scrollZoomEnabled = v;
+            if (v) Plugin.scrollZoomNeedsInit = true;
+            s.scrollZoomEnabled = v;
+            s.Save();
+        });
+
+        Separator(root);
         Header(root, "Possession disc");
+        Toggle(root, "Show possession disc", PuckPossessionIndicator.enabled, v =>
+        {
+            PuckPossessionIndicator.enabled = v;
+            s.possessionDiscEnabled = v;
+            s.Save();
+        });
         Slider(root, "Opacity", 0f, 1f, s.possessionCircle?.opacity ?? 0.75f,
             v =>
             {
@@ -132,6 +166,212 @@ public static class TRLSettingsPanel
                 s.cinematicSettings.positionSmoothingFactor = v;
             },
             s.Save);
+
+        // ── Camera mode keybinds ────────────────────────────────────────
+        Separator(root);
+        Header(root, "Camera mode keybinds");
+        Note(root, "Click a binding, then press a key or button to set it. Esc cancels; ✕ unbinds.");
+
+        var m = s.cameraModes ??= new CameraModeKeybinds();
+        RebindRow(root, "Become puck", () => m.becomePuck, v => m.becomePuck = v, CameraKeybinds.InitializeCameraModeKeybinds);
+        RebindRow(root, "Watch puck", () => m.watchPuck, v => m.watchPuck = v, CameraKeybinds.InitializeCameraModeKeybinds);
+        RebindRow(root, "Watch puck (above)", () => m.watchPuckAbove, v => m.watchPuckAbove = v, CameraKeybinds.InitializeCameraModeKeybinds);
+        RebindRow(root, "Watch puck (smart)", () => m.watchPuckSmart, v => m.watchPuckSmart = v, CameraKeybinds.InitializeCameraModeKeybinds);
+        RebindRow(root, "Watch puck (smart 2)", () => m.watchPuckSmart2, v => m.watchPuckSmart2 = v, CameraKeybinds.InitializeCameraModeKeybinds);
+        RebindRow(root, "Watch off", () => m.watchOff, v => m.watchOff = v, CameraKeybinds.InitializeCameraModeKeybinds);
+        RebindRow(root, "Cinematic smoothing toggle", () => m.cinematicSmoothing, v => m.cinematicSmoothing = v, CameraKeybinds.InitializeCameraModeKeybinds);
+        RebindRow(root, "Slow down (hold)", () => m.slowDown, v => m.slowDown = v, CameraKeybinds.InitializeCameraModeKeybinds);
+
+        // ── Player watch keybinds ───────────────────────────────────────
+        Separator(root);
+        Header(root, "Player watch keybinds");
+        Note(root, "Watch the Nth player on a team (sorted C, LW, RW, LD, RD, G).");
+
+        var blue = (s.watchPlayer ??= new TeamKeybinds()).blue ??= new PlayerKeybinds();
+        var red = s.watchPlayer.red ??= new PlayerKeybinds();
+
+        Subheader(root, "Blue team");
+        for (int i = 0; i < 6; i++)
+        {
+            int idx = i;
+            RebindRow(root, $"Player {idx + 1}",
+                () => GetPlayerBind(blue, idx), v => SetPlayerBind(blue, idx, v),
+                CameraKeybinds.InitializePlayerWatchKeybinds);
+        }
+
+        Subheader(root, "Red team");
+        for (int i = 0; i < 6; i++)
+        {
+            int idx = i;
+            RebindRow(root, $"Player {idx + 1}",
+                () => GetPlayerBind(red, idx), v => SetPlayerBind(red, idx, v),
+                CameraKeybinds.InitializePlayerWatchKeybinds);
+        }
+    }
+
+    private static string GetPlayerBind(PlayerKeybinds pk, int i) => i switch
+    {
+        0 => pk.player1, 1 => pk.player2, 2 => pk.player3,
+        3 => pk.player4, 4 => pk.player5, _ => pk.player6,
+    };
+
+    private static void SetPlayerBind(PlayerKeybinds pk, int i, string v)
+    {
+        switch (i)
+        {
+            case 0: pk.player1 = v; break;
+            case 1: pk.player2 = v; break;
+            case 2: pk.player3 = v; break;
+            case 3: pk.player4 = v; break;
+            case 4: pk.player5 = v; break;
+            default: pk.player6 = v; break;
+        }
+    }
+
+    // ── Keybind rows (raw UIElements, styled to match TRL) ──────────────
+    // Built raw rather than via SettingsPanelUI because rebind capture is InputSystem-specific
+    // and belongs here, not in TRL's generic helper set.
+
+    // At most one interactive rebind runs at a time.
+    private static bool _rebinding;
+
+    private static void RebindRow(VisualElement root, string label, Func<string> get, Action<string> set, Action afterSet)
+    {
+        var row = MakeRow();
+        row.Add(MakeLabel(label));
+
+        var right = new VisualElement { style = { flexDirection = FlexDirection.Row, alignItems = Align.Center } };
+
+        var bindBtn = new Button { text = Humanize(get()) };
+        StyleDarkButton(bindBtn);
+        bindBtn.style.minWidth = 170;
+        bindBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
+
+        var clearBtn = new Button { text = "✕" };
+        StyleDarkButton(clearBtn);
+        clearBtn.style.marginLeft = 6;
+
+        bindBtn.RegisterCallback<ClickEvent>(_ =>
+        {
+            if (_rebinding) return;
+            _rebinding = true;
+            bindBtn.text = "Press a key…  (Esc cancels)";
+            StartInteractiveRebind(
+                path => { set(path); Persist(afterSet); bindBtn.text = Humanize(get()); _rebinding = false; },
+                () => { bindBtn.text = Humanize(get()); _rebinding = false; });
+        });
+
+        clearBtn.RegisterCallback<ClickEvent>(_ =>
+        {
+            if (_rebinding) return;
+            set("");
+            Persist(afterSet);
+            bindBtn.text = Humanize(get());
+        });
+
+        right.Add(bindBtn);
+        right.Add(clearBtn);
+        row.Add(right);
+        root.Add(row);
+    }
+
+    private static void Persist(Action afterSet)
+    {
+        Plugin.modSettings?.Save();
+        try { afterSet?.Invoke(); }
+        catch (Exception e) { Plugin.LogError($"Keybind re-init failed: {e.Message}"); }
+    }
+
+    // Raw control path (e.g. "<Keyboard>/f") -> friendly label ("F"); empty -> "Unbound".
+    private static string Humanize(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return "Unbound";
+        try { return InputControlPath.ToHumanReadableString(path, InputControlPath.HumanReadableStringOptions.OmitDevice); }
+        catch { return path; }
+    }
+
+    // Listen for the next actuated button/key and report its control path. A throwaway action is
+    // used purely as the rebind target so we don't disturb the live keybind actions until we
+    // persist + re-init through afterSet.
+    private static void StartInteractiveRebind(Action<string> onComplete, Action onCancel)
+    {
+        try
+        {
+            var action = new InputAction(type: InputActionType.Button);
+            action.AddBinding("<Keyboard>/space"); // placeholder binding to rebind at index 0
+            action.Disable();
+            action.PerformInteractiveRebinding(0)
+                .WithControlsExcluding("<Mouse>/position")
+                .WithControlsExcluding("<Mouse>/delta")
+                .WithCancelingThrough("<Keyboard>/escape")
+                .OnCancel(op =>
+                {
+                    op.Dispose();
+                    action.Dispose();
+                    onCancel();
+                })
+                .OnComplete(op =>
+                {
+                    string path = action.bindings[0].effectivePath;
+                    op.Dispose();
+                    action.Dispose();
+                    onComplete(path);
+                })
+                .Start();
+        }
+        catch (Exception e)
+        {
+            Plugin.LogError($"Failed to start interactive rebind: {e.Message}");
+            onCancel();
+        }
+    }
+
+    private static VisualElement MakeRow() => new VisualElement
+    {
+        style =
+        {
+            flexDirection = FlexDirection.Row, alignItems = Align.Center,
+            justifyContent = Justify.SpaceBetween, marginTop = 4, marginBottom = 4,
+        },
+    };
+
+    private static Label MakeLabel(string text) => new Label(text)
+    {
+        style = { color = Color.white, fontSize = 16, whiteSpace = WhiteSpace.Normal },
+    };
+
+    private static void Subheader(VisualElement root, string text)
+    {
+        var l = new Label(text)
+        {
+            style =
+            {
+                color = new Color(0.85f, 0.85f, 0.85f), fontSize = 16,
+                unityFontStyleAndWeight = FontStyle.Bold, marginTop = 8, marginBottom = 2,
+            },
+        };
+        root.Add(l);
+    }
+
+    private static void StyleDarkButton(Button b)
+    {
+        b.style.backgroundColor = new StyleColor(new Color(0.25f, 0.25f, 0.25f));
+        b.style.color = Color.white;
+        b.style.fontSize = 14;
+        b.style.paddingTop = 6; b.style.paddingBottom = 6; b.style.paddingLeft = 12; b.style.paddingRight = 12;
+        b.style.borderTopWidth = 0; b.style.borderBottomWidth = 0; b.style.borderLeftWidth = 0; b.style.borderRightWidth = 0;
+        // Don't restyle on hover while a rebind is in flight, so the "Press a key…" button doesn't flicker.
+        b.RegisterCallback<MouseEnterEvent>(_ =>
+        {
+            if (_rebinding) return;
+            b.style.backgroundColor = Color.white;
+            b.style.color = Color.black;
+        });
+        b.RegisterCallback<MouseLeaveEvent>(_ =>
+        {
+            b.style.backgroundColor = new StyleColor(new Color(0.25f, 0.25f, 0.25f));
+            b.style.color = Color.white;
+        });
     }
 
     // ── SettingsPanelUI wrappers (reflection) ───────────────────────────

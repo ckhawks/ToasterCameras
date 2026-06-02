@@ -12,6 +12,16 @@ public static class CameraKeybinds
     public static InputAction[] bluePlayerActions = new InputAction[6];
     public static InputAction[] redPlayerActions = new InputAction[6];
 
+    // Disable + dispose an existing action before it's replaced, so re-initializing after a
+    // live rebind doesn't leak InputActions (and orphaned-but-enabled actions can't keep firing).
+    private static void Free(ref InputAction action)
+    {
+        if (action == null) return;
+        try { action.Disable(); action.Dispose(); }
+        catch { /* already torn down */ }
+        action = null;
+    }
+
     public static void InitializeCameraPositionKeybinds()
     {
         if (Plugin.modSettings == null) return;
@@ -40,6 +50,10 @@ public static class CameraKeybinds
     public static void InitializePlayerWatchKeybinds()
     {
         if (Plugin.modSettings == null) return;
+
+        // Replace any existing actions (live rebind re-runs this).
+        for (int i = 0; i < bluePlayerActions.Length; i++) Free(ref bluePlayerActions[i]);
+        for (int i = 0; i < redPlayerActions.Length; i++) Free(ref redPlayerActions[i]);
 
         var blue = Plugin.modSettings.watchPlayer.blue;
         var red = Plugin.modSettings.watchPlayer.red;
@@ -108,6 +122,16 @@ public static class CameraKeybinds
     public static void InitializeCameraModeKeybinds()
     {
         if (Plugin.modSettings == null) return;
+
+        // Replace any existing actions (live rebind re-runs this).
+        Free(ref Plugin.becomePuckAction);
+        Free(ref Plugin.watchPuckAction);
+        Free(ref Plugin.watchPuckAboveAction);
+        Free(ref Plugin.watchPuckSmartAction);
+        Free(ref Plugin.watchPuckSmart2Action);
+        Free(ref Plugin.watchOffAction);
+        Free(ref Plugin.cinematicSmoothingAction);
+        Free(ref Plugin.slowDownAction);
 
         var modes = Plugin.modSettings.cameraModes;
 

@@ -154,6 +154,11 @@ public static class ClientChat
                         foreach (var p in PuckManager.Instance.GetPucks(false))
                             PuckBeam.Cleanup(p);
                 }
+                if (Plugin.modSettings != null)
+                {
+                    Plugin.modSettings.puckBeamEnabled = PuckBeam.enabled;
+                    Plugin.modSettings.Save();
+                }
                 ChatHelper.AddSystemMessage(
                     $"<s>-></s> Puck beam {(PuckBeam.enabled ? "<color=green>enabled</color>" : "<color=red>disabled</color>")}.");
                 return false;
@@ -163,6 +168,11 @@ public static class ClientChat
                 messageParts[0].Equals("/dynamicfov", StringComparison.OrdinalIgnoreCase))
             {
                 Plugin.client_dynamicFovEnabled = !Plugin.client_dynamicFovEnabled;
+                if (Plugin.modSettings != null)
+                {
+                    Plugin.modSettings.dynamicFovEnabled = Plugin.client_dynamicFovEnabled;
+                    Plugin.modSettings.Save();
+                }
                 ChatHelper.AddSystemMessage(
                     $"<s>-></s> Dynamic FOV {(Plugin.client_dynamicFovEnabled ? "<color=green>enabled</color>" : "<color=red>disabled</color>")}.");
                 return false;
@@ -197,6 +207,11 @@ public static class ClientChat
                 Plugin.client_scrollZoomEnabled = !Plugin.client_scrollZoomEnabled;
                 if (Plugin.client_scrollZoomEnabled)
                     Plugin.scrollZoomNeedsInit = true;
+                if (Plugin.modSettings != null)
+                {
+                    Plugin.modSettings.scrollZoomEnabled = Plugin.client_scrollZoomEnabled;
+                    Plugin.modSettings.Save();
+                }
                 ChatHelper.AddSystemMessage(
                     $"<s>-></s> Scroll-wheel zoom {(Plugin.client_scrollZoomEnabled ? "<color=green>enabled</color> — use the mouse wheel to zoom" : "<color=red>disabled</color>")}.");
                 return false;

@@ -81,7 +81,16 @@ public class ModSettings
     public CinematicSettings cinematicSettings { get; set; } = new CinematicSettings();
     public PossessionCircleSettings possessionCircle { get; set; } = new PossessionCircleSettings();
     public bool disableQuickChatsInSpectator { get; set; } = true;
-    
+
+    // Feature toggles, persisted so they survive a restart instead of resetting to their
+    // built-in defaults each launch. Defaults mirror the live defaults in Plugin / PuckBeam /
+    // PuckPossessionIndicator. Loaded into those live fields at startup (see Plugin.OnEnable);
+    // both the chat commands and the TRL menu keep them in sync.
+    public bool puckBeamEnabled { get; set; } = true;
+    public bool dynamicFovEnabled { get; set; } = false;
+    public bool scrollZoomEnabled { get; set; } = false;
+    public bool possessionDiscEnabled { get; set; } = true;
+
     static string ConfigurationFileName = $"{Plugin.MOD_NAME}.json";
 
     public static Dictionary<string, CameraPosition> GetDefaultCameraPositions()
