@@ -1,0 +1,189 @@
+// TRLSettingsPanel.cs
+//
+// Registers a "Cameras" settings page inside ToasterReskinLoader's Reskin Manager menu,
+// if (and only if) TRL is installed. Like TRLBridge, this is a soft dependency: we reach
+// TRL's public API over reflection so ToasterCameras still loads and works standalone.
+//
+// The page is built with TRL's own SettingsPanelUI helpers (also called over reflection)
+// so our rows look native. ToasterCameras keeps owning its settings — the widgets read and
+// write Plugin.modSettings and call Save(); TRL only hosts the UI.
+
+using System;
+using System.Reflection;
+using UnityEngine;
+using UnityEngine.UIElements;
+
+namespace ToasterCameras;
+
+public static class TRLSettingsPanel
+{
+    private const string PanelId = "ToasterCameras";
+
+    // Reflected once on first use; null when TRL isn't present (so we silently do nothing).
+    private static bool _resolved;
+    private static MethodInfo _register;
+    private static MethodInfo _uiNote, _uiSeparator, _uiHeader, _uiToggle, _uiSlider;
+
+    /// <summary>
+    /// Adds the Cameras page to TRL's menu. Safe to call when TRL isn't installed — it just
+    /// no-ops. Call once from the plugin's OnEnable after settings are loaded.
+    /// </summary>
+    public static void TryRegister()
+    {
+        Resolve();
+        if (_register == null)
+        {
+            Plugin.Log("ToasterReskinLoader not detected; skipping settings panel registration.");
+            return;
+        }
+
+        try
+        {
+            // RegisterSettingsPanel(string id, string title, string group, Action<VisualElement> build, int order)
+            Action<VisualElement> build = BuildPanel;
+            _register.Invoke(null, new object[] { PanelId, "Cameras", "Cameras", build, 0 });
+            Plugin.Log("Registered Cameras settings panel with ToasterReskinLoader.");
+        }
+        catch (Exception e)
+        {
+            Plugin.LogError($"Failed to register settings panel with TRL: {e.Message}");
+        }
+    }
+
+    private static void Resolve()
+    {
+        if (_resolved) return;
+        _resolved = true;
+
+        try
+        {
+            Type api = null, ui = null;
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                api ??= asm.GetType("ToasterReskinLoader.ToasterReskinLoaderAPI");
+                ui ??= asm.GetType("ToasterReskinLoader.api.SettingsPanelUI");
+                if (api != null && ui != null) break;
+            }
+            if (api == null) return;
+
+            _register = api.GetMethod("RegisterSettingsPanel", BindingFlags.Public | BindingFlags.Static);
+
+            if (ui != null)
+            {
+                const BindingFlags f = BindingFlags.Public | BindingFlags.Static;
+                _uiNote = ui.GetMethod("Note", f);
+                _uiSeparator = ui.GetMethod("Separator", f);
+                _uiHeader = ui.GetMethod("Header", f);
+                _uiToggle = ui.GetMethod("Toggle", f);
+                _uiSlider = ui.GetMethod("Slider", f);
+            }
+        }
+        catch
+        {
+            // Reflection failed — treat TRL as absent.
+        }
+    }
+
+    // ── Panel content ───────────────────────────────────────────────────
+    // Rebuilt from current settings each time the page is opened.
+
+    private static void BuildPanel(VisualElement root)
+    {
+        var s = Plugin.modSettings;
+        if (s == null)
+        {
+            Note(root, "Camera settings aren't loaded yet.");
+            return;
+        }
+
+        Note(root, "Spectator camera tweaks. Changes apply and save immediately.");
+
+        Toggle(root, "Disable quick chats while spectating", s.disableQuickChatsInSpectator, v =>
+        {
+            s.disableQuickChatsInSpectator = v;
+            s.Save();
+        });
+
+        Separator(root);
+        Header(root, "Possession disc");
+        Slider(root, "Opacity", 0f, 1f, s.possessionCircle?.opacity ?? 0.75f,
+            v =>
+            {
+                s.possessionCircle ??= new PossessionCircleSettings();
+                s.possessionCircle.opacity = v;
+                PuckPossessionIndicator.opacity = Mathf.Clamp01(v);
+            },
+            s.Save);
+
+        Separator(root);
+        Header(root, "Cinematic smoothing");
+        Note(root, "Lower = smoother but laggier camera while cinematic smoothing is toggled on.");
+        Slider(root, "Rotation smoothing", 0.01f, 1f, s.cinematicSettings?.rotationSmoothingFactor ?? 0.1f,
+            v =>
+            {
+                s.cinematicSettings ??= new CinematicSettings();
+                s.cinematicSettings.rotationSmoothingFactor = v;
+            },
+            s.Save);
+        Slider(root, "Position smoothing", 0.01f, 1f, s.cinematicSettings?.positionSmoothingFactor ?? 0.1f,
+            v =>
+            {
+                s.cinematicSettings ??= new CinematicSettings();
+                s.cinematicSettings.positionSmoothingFactor = v;
+            },
+            s.Save);
+    }
+
+    // ── SettingsPanelUI wrappers (reflection) ───────────────────────────
+    // These run inside BuildPanel, which TRL only calls when it's present, so the methods
+    // are resolved. Each falls back to a plain VisualElement if reflection somehow failed.
+
+    private static void Note(VisualElement root, string text)
+    {
+        if (_uiNote != null) { _uiNote.Invoke(null, new object[] { root, text }); return; }
+        var l = new Label(text) { style = { color = new Color(0.7f, 0.7f, 0.7f), whiteSpace = WhiteSpace.Normal } };
+        root.Add(l);
+    }
+
+    private static void Separator(VisualElement root)
+    {
+        if (_uiSeparator != null) { _uiSeparator.Invoke(null, new object[] { root }); return; }
+        var sep = new VisualElement { style = { height = 1, marginTop = 12, marginBottom = 12,
+            backgroundColor = new Color(0.4f, 0.4f, 0.4f) } };
+        root.Add(sep);
+    }
+
+    private static void Header(VisualElement root, string text)
+    {
+        if (_uiHeader != null) { _uiHeader.Invoke(null, new object[] { root, text }); return; }
+        var l = new Label(text) { style = { color = Color.white, unityFontStyleAndWeight = FontStyle.Bold } };
+        root.Add(l);
+    }
+
+    private static void Toggle(VisualElement root, string label, bool value, Action<bool> onChange)
+    {
+        if (_uiToggle != null) { _uiToggle.Invoke(null, new object[] { root, label, value, onChange }); return; }
+        var t = new Toggle(label) { value = value };
+        t.RegisterValueChangedCallback(e => onChange(e.newValue));
+        root.Add(t);
+    }
+
+    // onChange applies the value live (every drag step); onSave persists once the slider settles
+    // (debounced by TRL) so dragging doesn't rewrite the config file on every tick.
+    private static void Slider(VisualElement root, string label, float min, float max, float value,
+        Action<float> onChange, Action onSave)
+    {
+        if (_uiSlider != null)
+        {
+            // SettingsPanelUI.Slider(root, label, min, max, value, onChange, onCommit, debounceMs)
+            _uiSlider.Invoke(null, new object[] { root, label, min, max, value, onChange, onSave, 400L });
+            return;
+        }
+
+        // Fallback when TRL's helper is unavailable: live on change, save on pointer-up.
+        var sl = new Slider(label, min, max) { value = value, showInputField = true };
+        sl.RegisterValueChangedCallback(e => onChange(e.newValue));
+        if (onSave != null) sl.RegisterCallback<PointerUpEvent>(_ => onSave());
+        root.Add(sl);
+    }
+}

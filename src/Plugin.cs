@@ -148,6 +148,10 @@ public class Plugin : IPuckPlugin
                 runnerGo.hideFlags = HideFlags.HideAndDontSave;
                 UnityEngine.Object.DontDestroyOnLoad(runnerGo);
                 runnerGo.AddComponent<PuckIndicatorRunner>();
+
+                // Contribute a Cameras page to ToasterReskinLoader's menu when TRL is present
+                // (soft dependency — no-ops if it isn't installed).
+                TRLSettingsPanel.TryRegister();
             }
             
             Plugin.Log($"Enabled!");
