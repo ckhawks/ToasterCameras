@@ -51,6 +51,15 @@ public static class PuckPossessionIndicator
     // Last team to touch this puck. Read by other features (e.g. PuckBeam).
     private static readonly Dictionary<Puck, PlayerTeam> lastTouchTeamMap = new();
 
+    // True while the match is in warmup. The possession ring and puck beam are
+    // gameplay-feedback overlays that only make sense during live play, so both
+    // features suppress themselves in warmup.
+    public static bool IsWarmup()
+    {
+        var gm = GameManager.Instance;
+        return gm != null && gm.Phase == GamePhase.Warmup;
+    }
+
     public static PlayerTeam GetLastTouchTeam(Puck puck)
     {
         if (puck == null) return PlayerTeam.None;
@@ -167,6 +176,8 @@ public static class PuckPossessionIndicator
             lastSeenCollisionTime[puck] = -1f;
         }
 
+        if (!ind.go.activeSelf) ind.go.SetActive(true);
+
         var t = ind.go.transform;
         var pos = puck.transform.position;
         pos.y = 0.005f;
@@ -227,9 +238,18 @@ public static class PuckPossessionIndicator
         lastTouchTeamMap.Remove(puck);
     }
 
+    // Deactivate every live disc without destroying it, so it can be revived
+    // instantly when play resumes. Used to suppress the feature during warmup.
+    private static void HideAll()
+    {
+        foreach (var ind in indicatorMap.Values)
+            if (ind?.go != null && ind.go.activeSelf) ind.go.SetActive(false);
+    }
+
     public static void TickAll()
     {
         if (PuckManager.Instance == null) return;
+        if (IsWarmup()) { HideAll(); return; }
         var pucks = PuckManager.Instance.GetPucks(false);
         if (pucks == null) return;
         for (var i = 0; i < pucks.Count; i++) Tick(pucks[i]);

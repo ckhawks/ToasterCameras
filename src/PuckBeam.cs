@@ -111,6 +111,8 @@ public static class PuckBeam
             beams[puck] = lr;
         }
 
+        if (!lr.gameObject.activeSelf) lr.gameObject.SetActive(true);
+
         var p = puck.transform.position;
         lr.SetPosition(0, new Vector3(p.x, bottomY, p.z));
         lr.SetPosition(1, new Vector3(p.x, topY, p.z));
@@ -125,10 +127,19 @@ public static class PuckBeam
         beams.Remove(puck);
     }
 
+    // Deactivate every live beam without destroying it, so it can be revived
+    // instantly when play resumes. Used to suppress the feature during warmup.
+    private static void HideAll()
+    {
+        foreach (var lr in beams.Values)
+            if (lr != null && lr.gameObject.activeSelf) lr.gameObject.SetActive(false);
+    }
+
     public static void TickAll()
     {
         if (!enabled) return;
         if (PuckManager.Instance == null) return;
+        if (PuckPossessionIndicator.IsWarmup()) { HideAll(); return; }
         var pucks = PuckManager.Instance.GetPucks(false);
         if (pucks == null) return;
         for (var i = 0; i < pucks.Count; i++) Tick(pucks[i]);
