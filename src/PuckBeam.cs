@@ -34,6 +34,11 @@ public static class PuckBeam
     public static float width = 0.12f;
 
     private static readonly Dictionary<Puck, LineRenderer> beams = new();
+    // Last team color baked into each beam's gradient, so we only rebuild the
+    // Gradient (an allocation) when the color actually changes rather than every
+    // frame. The beam's geometry tunables are compile-time constants, so color is
+    // the only thing that can change the gradient.
+    private static readonly Dictionary<Puck, Color> appliedColor = new();
     private static Shader spritesShader;
     private static Material beamMaterial;
 
@@ -109,6 +114,8 @@ public static class PuckBeam
         {
             lr = CreateBeam(puck);
             beams[puck] = lr;
+            // Force the gradient to be (re)applied to this fresh LineRenderer.
+            appliedColor.Remove(puck);
         }
 
         if (!lr.gameObject.activeSelf) lr.gameObject.SetActive(true);
@@ -117,7 +124,12 @@ public static class PuckBeam
         lr.SetPosition(0, new Vector3(p.x, bottomY, p.z));
         lr.SetPosition(1, new Vector3(p.x, topY, p.z));
 
-        ApplyGradient(lr, TeamColor(PuckPossessionIndicator.GetLastTouchTeam(puck)));
+        var teamColor = TeamColor(PuckPossessionIndicator.GetLastTouchTeam(puck));
+        if (!appliedColor.TryGetValue(puck, out var prev) || prev != teamColor)
+        {
+            ApplyGradient(lr, teamColor);
+            appliedColor[puck] = teamColor;
+        }
     }
 
     public static void Cleanup(Puck puck)
@@ -125,6 +137,7 @@ public static class PuckBeam
         if (puck == null) return;
         if (beams.TryGetValue(puck, out var lr) && lr != null) Object.Destroy(lr.gameObject);
         beams.Remove(puck);
+        appliedColor.Remove(puck);
     }
 
     // Deactivate every live beam without destroying it, so it can be revived

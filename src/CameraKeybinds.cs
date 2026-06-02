@@ -182,7 +182,7 @@ public static class CameraKeybinds
             if (chat.IsFocused) return;
 
             // Check if current watched player still exists
-            if (Plugin.client_spectatorWatchThirdPerson && Plugin.thirdPersonPlayerToWatch != null)
+            if (Plugin.cameraMode == CameraMode.WatchThirdPerson && Plugin.thirdPersonPlayerToWatch != null)
             {
                 if (PlayerManager.Instance != null)
                 {
@@ -190,7 +190,7 @@ public static class CameraKeybinds
                     if (allPlayers != null && !allPlayers.Contains(Plugin.thirdPersonPlayerToWatch))
                     {
                         Plugin.Log("Watched player no longer exists, disabling third person mode");
-                        DisableAllCameraModes();
+                        Plugin.SetCameraMode(CameraMode.None);
                     }
                 }
             }
@@ -201,8 +201,7 @@ public static class CameraKeybinds
                 if (PuckManager.Instance == null || PuckManager.Instance.GetPuck() == null ||
                     Plugin.spectatorCamera == null) return;
 
-                DisableAllCameraModes();
-                Plugin.client_spectatorIsPuck = true;
+                Plugin.SetCameraMode(CameraMode.Puck);
                 Plugin.spectatorCamera.transform.SetParent(PuckManager.Instance.GetPuck().transform);
                 Plugin.spectatorCamera.transform.localPosition = Vector3.zero;
                 Plugin.spectatorCamera.transform.localRotation = Quaternion.identity;
@@ -210,26 +209,22 @@ public static class CameraKeybinds
 
             CheckCameraModeKeybind("watchPuck", Plugin.watchPuckAction, () =>
             {
-                DisableAllCameraModes();
-                Plugin.client_spectatorWatchPuck = true;
+                Plugin.SetCameraMode(CameraMode.WatchPuck);
             });
 
             CheckCameraModeKeybind("watchPuckAbove", Plugin.watchPuckAboveAction, () =>
             {
-                DisableAllCameraModes();
-                Plugin.client_spectatorWatchPuckAbove = true;
+                Plugin.SetCameraMode(CameraMode.WatchPuckAbove);
             });
 
             CheckCameraModeKeybind("watchPuckSmart", Plugin.watchPuckSmartAction, () =>
             {
-                DisableAllCameraModes();
-                Plugin.client_spectatorWatchPuckSmart = true;
+                Plugin.SetCameraMode(CameraMode.WatchPuckSmart);
             });
 
             CheckCameraModeKeybind("watchPuckSmart2", Plugin.watchPuckSmart2Action, () =>
             {
-                DisableAllCameraModes();
-                Plugin.client_spectatorWatchPuckSmart2 = true;
+                Plugin.SetCameraMode(CameraMode.WatchPuckSmart2);
             });
 
             CheckCameraModeKeybind("cinematicSmoothing", Plugin.cinematicSmoothingAction, () =>
@@ -246,7 +241,7 @@ public static class CameraKeybinds
                 Plugin.Log($"Cinematic smoothing {status}");
             });
 
-            CheckCameraModeKeybind("watchOff", Plugin.watchOffAction, () => { DisableAllCameraModes(); });
+            CheckCameraModeKeybind("watchOff", Plugin.watchOffAction, () => { Plugin.SetCameraMode(CameraMode.None); });
 
             // Check player watch keybinds
             if (PlayerManager.Instance != null)
@@ -308,9 +303,8 @@ public static class CameraKeybinds
 
                     if (playerToWatch != null)
                     {
-                        DisableAllCameraModes();
                         Plugin.thirdPersonPlayerToWatch = playerToWatch;
-                        Plugin.client_spectatorWatchThirdPerson = true;
+                        Plugin.SetCameraMode(CameraMode.WatchThirdPerson);
 
                         string teamName = team == PlayerTeam.Blue ? "Blue" : "Red";
                         string posName = playerToWatch.PlayerPosition != null ?
@@ -338,9 +332,8 @@ public static class CameraKeybinds
 
         private static void SetCameraPosition(string positionKey)
         {
-            DisableAllCameraModes();
             Plugin.client_spectatorStaticPosition = positionKey;
-            Plugin.client_spectatorStaticPositioning = true;
+            Plugin.SetCameraMode(CameraMode.StaticPosition);
 
             if (Plugin.modSettings.cameraPositions.TryGetValue(positionKey, out var camPos))
             {
@@ -350,19 +343,5 @@ public static class CameraKeybinds
             }
         }
 
-        private static void DisableAllCameraModes()
-        {
-            Plugin.client_spectatorWatchPuck = false;
-            Plugin.client_spectatorWatchPuckSmart = false;
-            Plugin.client_spectatorWatchThirdPerson = false;
-            Plugin.client_spectatorIsPuck = false;
-            Plugin.client_spectatorWatchPuckAbove = false;
-            Plugin.client_spectatorWatchPuckSmart2 = false;
-            Plugin.client_spectatorStaticPositioning = false;
-            Plugin.client_spectatorStaticPosition = "";
-
-            if (Plugin.spectatorCamera != null && Plugin.spectatorCamera.transform.parent != null)
-                Plugin.spectatorCamera.transform.SetParent(null);
-        }
     }
 }

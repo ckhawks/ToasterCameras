@@ -9,22 +9,6 @@ namespace ToasterCameras;
 
 public static class ClientChat
 {
-    private static void DisableAllCameraModes()
-    {
-        Plugin.client_spectatorWatchPuck = false;
-        Plugin.client_spectatorWatchPuckGrid = false;
-        Plugin.client_spectatorWatchPuckSmart = false;
-        Plugin.client_spectatorWatchThirdPerson = false;
-        Plugin.client_spectatorIsPuck = false;
-        Plugin.client_spectatorWatchPuckAbove = false;
-        Plugin.client_spectatorWatchPuckSmart2 = false;
-        Plugin.client_spectatorStaticPositioning = false;
-        Plugin.client_spectatorStaticPosition = "";
-
-        if (Plugin.spectatorCamera != null && Plugin.spectatorCamera.transform.parent != null)
-            Plugin.spectatorCamera.transform.SetParent(null);
-    }
-
     // In b312 chat sending moved out of UIChat onto ChatManager.
     // Signature: Client_SendChatMessage(string content, bool isQuickChat, bool isTeamChat)
     [HarmonyPatch(typeof(ChatManager), nameof(ChatManager.Client_SendChatMessage))]
@@ -41,8 +25,7 @@ public static class ClientChat
 
             if (messageParts[0].Equals("/becomepuck", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/bep", StringComparison.OrdinalIgnoreCase))
             {
-                DisableAllCameraModes();
-                Plugin.client_spectatorIsPuck = true;
+                Plugin.SetCameraMode(CameraMode.Puck);
                 if (Plugin.spectatorCamera != null && PuckManager.Instance != null && PuckManager.Instance.GetPuck() != null)
                 {
                     Plugin.spectatorCamera.transform.SetParent(PuckManager.Instance.GetPuck().transform);
@@ -54,36 +37,31 @@ public static class ClientChat
 
             if (messageParts[0].Equals("/watchpuck", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/wp", StringComparison.OrdinalIgnoreCase))
             {
-                DisableAllCameraModes();
-                Plugin.client_spectatorWatchPuck = true;
+                Plugin.SetCameraMode(CameraMode.WatchPuck);
                 return false;
             }
 
             if (messageParts[0].Equals("/watchpuckgrid", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/wpg", StringComparison.OrdinalIgnoreCase))
             {
-                DisableAllCameraModes();
-                Plugin.client_spectatorWatchPuckGrid = true;
+                Plugin.SetCameraMode(CameraMode.WatchPuckGrid);
                 return false;
             }
 
             if (messageParts[0].Equals("/watchpuckabove", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/wpa", StringComparison.OrdinalIgnoreCase))
             {
-                DisableAllCameraModes();
-                Plugin.client_spectatorWatchPuckAbove = true;
+                Plugin.SetCameraMode(CameraMode.WatchPuckAbove);
                 return false;
             }
 
             if (messageParts[0].Equals("/watchpucksmart", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/wps", StringComparison.OrdinalIgnoreCase))
             {
-                DisableAllCameraModes();
-                Plugin.client_spectatorWatchPuckSmart = true;
+                Plugin.SetCameraMode(CameraMode.WatchPuckSmart);
                 return false;
             }
 
             if (messageParts[0].Equals("/watchpucksmart2", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/wps2", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/wpss", StringComparison.OrdinalIgnoreCase))
             {
-                DisableAllCameraModes();
-                Plugin.client_spectatorWatchPuckSmart2 = true;
+                Plugin.SetCameraMode(CameraMode.WatchPuckSmart2);
                 return false;
             }
 
@@ -127,25 +105,24 @@ public static class ClientChat
                         return false;
                     }
 
-                    DisableAllCameraModes();
                     Plugin.thirdPersonPlayerToWatch = playerToWatch;
-                    Plugin.client_spectatorWatchThirdPerson = true;
+                    Plugin.SetCameraMode(CameraMode.WatchThirdPerson);
                     return false;
                 }
 
-                if (Plugin.client_spectatorWatchThirdPerson == false)
+                if (Plugin.cameraMode != CameraMode.WatchThirdPerson)
                 {
                     ChatHelper.AddSystemMessage(
                         $"<s>-></s> <size=16><color=red>Please specify a <b>name</b> or <b>number</b>.</color></size>");
                     return false;
                 }
-                Plugin.client_spectatorWatchThirdPerson = false;
+                Plugin.SetCameraMode(CameraMode.None);
                 return false;
             }
 
             if (messageParts[0].Equals("/watchoff", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/wo", StringComparison.OrdinalIgnoreCase))
             {
-                DisableAllCameraModes();
+                Plugin.SetCameraMode(CameraMode.None);
                 return false;
             }
 
@@ -163,9 +140,8 @@ public static class ClientChat
                     return false;
                 }
 
-                DisableAllCameraModes();
                 Plugin.client_spectatorStaticPosition = messageParts[1].ToLower();
-                Plugin.client_spectatorStaticPositioning = true;
+                Plugin.SetCameraMode(CameraMode.StaticPosition);
                 return false;
             }
 

@@ -10,10 +10,10 @@ namespace ToasterCameras;
 
 public static class PatchPlayerCamera
 {
-    // SpectatorCamera fields in b312:
+    // SpectatorCamera private fields we read/write by reflection (verified in b897):
     //   private Vector3 position
-    //   [SerializeField] private float movementSpeed
-    //   [SerializeField] private float positionSmoothTime
+    //   private float movementSpeed
+    //   private float positionSmoothTime
     private static readonly FieldInfo _positionField = typeof(SpectatorCamera)
         .GetField("position", BindingFlags.Instance | BindingFlags.NonPublic);
 
@@ -109,6 +109,38 @@ public static class PatchPlayerCamera
             return result;
         }
 
+        // Free-fly speed scaling shared by every manually-flown mode: sprint
+        // doubles, the slow-down modifier quarters, otherwise 1×.
+        private static float SpeedMultiplier()
+        {
+            if (InputManager.SprintAction.IsPressed()) return 2f;
+            if (Plugin.slowDownAction != null && Plugin.slowDownAction.IsPressed()) return 0.25f;
+            return 1f;
+        }
+
+        // Shared WASD/jump/slide free-fly movement used by /wp and /wpg. Advances
+        // the camera's smoothed free-look position from input and writes it back to
+        // SpectatorCamera's private position field. No-ops while a menu/chat owns
+        // the mouse so UI interaction doesn't also fly the camera.
+        private static void ApplyFreeLookMovement(SpectatorCamera cam, float deltaTime,
+            ref Vector3 freeLookPosition, float moveSpeedDefault, float positionSmoothing)
+        {
+            if (GlobalStateManager.UIState.IsMouseRequired) return;
+
+            var moveVector = new Vector3(
+                InputManager.TurnRightAction.ReadValue<float>() - InputManager.TurnLeftAction.ReadValue<float>(),
+                InputManager.MoveForwardAction.ReadValue<float>() - InputManager.MoveBackwardAction.ReadValue<float>(),
+                InputManager.JumpAction.IsPressed() ? 1 : InputManager.SlideAction.IsPressed() ? -1 : 0);
+
+            var speed = moveSpeedDefault * SpeedMultiplier();
+            freeLookPosition += cam.transform.right * moveVector.x * deltaTime * speed;
+            freeLookPosition += cam.transform.forward * moveVector.y * deltaTime * speed;
+            freeLookPosition += cam.transform.up * moveVector.z * deltaTime * speed;
+            _positionField.SetValue(cam, freeLookPosition);
+            cam.transform.position = Vector3.Lerp(cam.transform.position, freeLookPosition,
+                deltaTime / Mathf.Max(positionSmoothing, 0.0001f));
+        }
+
         [HarmonyPrefix]
         public static bool Prefix(SpectatorCamera __instance, float deltaTime)
         {
@@ -192,7 +224,7 @@ public static class PatchPlayerCamera
                 return true;
             }
 
-            if (Plugin.client_spectatorIsPuck)
+            if (Plugin.cameraMode == CameraMode.Puck)
             {
                 if (PuckManager.Instance == null) Plugin.Log("Puckmanager is so dead bro");
 
@@ -224,66 +256,22 @@ public static class PatchPlayerCamera
             var height = 6f;
             var widthPosition = iceWidth - 3;
 
-            if (Plugin.client_spectatorWatchPuck)
+            if (Plugin.cameraMode == CameraMode.WatchPuck)
             {
                 var puck = PuckManager.Instance.GetPuck();
                 if (puck != null) Plugin.spectatorCamera.transform.LookAt(puck.transform.position);
-                var isMouseActive = GlobalStateManager.UIState.IsMouseRequired;
-                if (!isMouseActive)
-                {
-                    var moveVector = new Vector3(
-                        InputManager.TurnRightAction.ReadValue<float>() - InputManager.TurnLeftAction.ReadValue<float>(),
-                        InputManager.MoveForwardAction.ReadValue<float>() - InputManager.MoveBackwardAction.ReadValue<float>(),
-                        InputManager.JumpAction.IsPressed() ? 1 : InputManager.SlideAction.IsPressed() ? -1 : 0);
-                    var isSprinting = InputManager.SprintAction.IsPressed();
-                    var isSlowingDown = Plugin.slowDownAction != null && Plugin.slowDownAction.IsPressed();
-
-                    var speedMultiplier = 1f;
-                    if (isSprinting)
-                        speedMultiplier = 2f;
-                    else if (isSlowingDown)
-                        speedMultiplier = 0.25f;
-
-                    var speed = freeLookMovementSpeedDefault * speedMultiplier;
-                    freeLookPosition += __instance.transform.right * moveVector.x * deltaTime * speed;
-                    freeLookPosition += __instance.transform.forward * moveVector.y * deltaTime * speed;
-                    freeLookPosition += __instance.transform.up * moveVector.z * deltaTime * speed;
-                    _positionField.SetValue(__instance, freeLookPosition);
-                    __instance.transform.position = Vector3.Lerp(__instance.transform.position, freeLookPosition,
-                        deltaTime / Mathf.Max(freeLookPositionSmoothing, 0.0001f));
-                }
+                ApplyFreeLookMovement(__instance, deltaTime, ref freeLookPosition,
+                    freeLookMovementSpeedDefault, freeLookPositionSmoothing);
 
                 return false;
             }
 
-            if (Plugin.client_spectatorWatchPuckGrid)
+            if (Plugin.cameraMode == CameraMode.WatchPuckGrid)
             {
                 // Free movement (same controls as /wp) is always available, with
                 // or without a puck.
-                var isMouseActive = GlobalStateManager.UIState.IsMouseRequired;
-                if (!isMouseActive)
-                {
-                    var moveVector = new Vector3(
-                        InputManager.TurnRightAction.ReadValue<float>() - InputManager.TurnLeftAction.ReadValue<float>(),
-                        InputManager.MoveForwardAction.ReadValue<float>() - InputManager.MoveBackwardAction.ReadValue<float>(),
-                        InputManager.JumpAction.IsPressed() ? 1 : InputManager.SlideAction.IsPressed() ? -1 : 0);
-                    var isSprinting = InputManager.SprintAction.IsPressed();
-                    var isSlowingDown = Plugin.slowDownAction != null && Plugin.slowDownAction.IsPressed();
-
-                    var speedMultiplier = 1f;
-                    if (isSprinting)
-                        speedMultiplier = 2f;
-                    else if (isSlowingDown)
-                        speedMultiplier = 0.25f;
-
-                    var speed = freeLookMovementSpeedDefault * speedMultiplier;
-                    freeLookPosition += __instance.transform.right * moveVector.x * deltaTime * speed;
-                    freeLookPosition += __instance.transform.forward * moveVector.y * deltaTime * speed;
-                    freeLookPosition += __instance.transform.up * moveVector.z * deltaTime * speed;
-                    _positionField.SetValue(__instance, freeLookPosition);
-                    __instance.transform.position = Vector3.Lerp(__instance.transform.position, freeLookPosition,
-                        deltaTime / Mathf.Max(freeLookPositionSmoothing, 0.0001f));
-                }
+                ApplyFreeLookMovement(__instance, deltaTime, ref freeLookPosition,
+                    freeLookMovementSpeedDefault, freeLookPositionSmoothing);
 
                 // Aim target. We frame the *lead point* — where the action will be
                 // in N seconds based on its horizontal velocity — instead of the
@@ -420,7 +408,7 @@ public static class PatchPlayerCamera
                 return false;
             }
 
-            if (Plugin.client_spectatorWatchPuckAbove)
+            if (Plugin.cameraMode == CameraMode.WatchPuckAbove)
             {
                 var puck = PuckManager.Instance.GetPuck();
                 if (puck != null)
@@ -429,16 +417,8 @@ public static class PatchPlayerCamera
                         InputManager.TurnRightAction.ReadValue<float>() - InputManager.TurnLeftAction.ReadValue<float>(),
                         InputManager.MoveForwardAction.ReadValue<float>() - InputManager.MoveBackwardAction.ReadValue<float>(),
                         InputManager.JumpAction.IsPressed() ? 1 : InputManager.SlideAction.IsPressed() ? -1 : 0);
-                    var isSprinting = InputManager.SprintAction.IsPressed();
-                    var isSlowingDown = Plugin.slowDownAction != null && Plugin.slowDownAction.IsPressed();
 
-                    var speedMultiplier = 1f;
-                    if (isSprinting)
-                        speedMultiplier = 2f;
-                    else if (isSlowingDown)
-                        speedMultiplier = 0.25f;
-
-                    var speed = freeLookMovementSpeedDefault * speedMultiplier;
+                    var speed = freeLookMovementSpeedDefault * SpeedMultiplier();
                     var positionToSet = new Vector3(puck.transform.position.x,
                         __instance.transform.position.y + moveVector.y * deltaTime * speed,
                         puck.transform.position.z);
@@ -449,7 +429,7 @@ public static class PatchPlayerCamera
                 return false;
             }
 
-            if (Plugin.client_spectatorWatchThirdPerson)
+            if (Plugin.cameraMode == CameraMode.WatchThirdPerson)
             {
                 var offset = new Vector3(0, 3, -2);
                 var smoothSpeed = 10f;
@@ -464,7 +444,7 @@ public static class PatchPlayerCamera
                 return false;
             }
 
-            if (Plugin.client_spectatorWatchPuckSmart)
+            if (Plugin.cameraMode == CameraMode.WatchPuckSmart)
             {
                 var puck = PuckManager.Instance.GetPuck();
                 if (puck != null)
@@ -522,7 +502,7 @@ public static class PatchPlayerCamera
                 return false;
             }
 
-            if (Plugin.client_spectatorWatchPuckSmart2)
+            if (Plugin.cameraMode == CameraMode.WatchPuckSmart2)
             {
                 var pucks = PuckManager.Instance.GetPucks();
                 var puck = pucks.ToArray().Length > 0 ? pucks.ToArray()[0] : null;
@@ -594,7 +574,7 @@ public static class PatchPlayerCamera
                 return false;
             }
 
-            if (Plugin.client_spectatorStaticPositioning)
+            if (Plugin.cameraMode == CameraMode.StaticPosition)
             {
                 if (Plugin.modSettings.cameraPositions.TryGetValue(
                         Plugin.client_spectatorStaticPosition, out var camPos))
@@ -606,15 +586,9 @@ public static class PatchPlayerCamera
                 return false;
             }
 
-            var isAnyOtherModeActive =
-                Plugin.client_spectatorIsPuck ||
-                Plugin.client_spectatorWatchPuck ||
-                Plugin.client_spectatorWatchPuckGrid ||
-                Plugin.client_spectatorWatchPuckAbove ||
-                Plugin.client_spectatorWatchThirdPerson ||
-                Plugin.client_spectatorWatchPuckSmart ||
-                Plugin.client_spectatorWatchPuckSmart2 ||
-                Plugin.client_spectatorStaticPositioning;
+            // Cinematic smoothing is the free-fly fallback; it only runs when no
+            // dedicated camera mode is overriding the view.
+            var isAnyOtherModeActive = Plugin.cameraMode != CameraMode.None;
 
             if (Plugin.client_cinematicSmoothingEnabled && !isAnyOtherModeActive)
             {
@@ -627,16 +601,7 @@ public static class PatchPlayerCamera
                     (InputManager.MoveBackwardAction.IsPressed() ? -1 : 0),
                     InputManager.JumpAction.IsPressed() ? 1 : InputManager.SlideAction.IsPressed() ? -1 : 0
                 );
-                var isSprinting = InputManager.SprintAction.IsPressed();
-                var isSlowingDown = Plugin.slowDownAction != null && Plugin.slowDownAction.IsPressed();
-
-                var speedMultiplier = 1f;
-                if (isSprinting)
-                    speedMultiplier = 2f;
-                else if (isSlowingDown)
-                    speedMultiplier = 0.25f;
-
-                var currentMoveSpeed = freeLookMovementSpeed * speedMultiplier;
+                var currentMoveSpeed = freeLookMovementSpeed * SpeedMultiplier();
 
                 var lookDelta = InputManager.StickAction.ReadValue<Vector2>();
                 var lookSensitivity = SettingsManager.LookSensitivity;

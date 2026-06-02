@@ -8,6 +8,22 @@ using UnityEngine.Rendering;
 
 namespace ToasterCameras;
 
+// The spectator camera modes are mutually exclusive — at most one is active at a
+// time. Tracking them as a single enum (rather than a fan of parallel bools)
+// makes "switch to mode X" a single assignment that can't leave two modes half-on.
+public enum CameraMode
+{
+    None,             // game's default camera behavior (no override)
+    Puck,             // camera parented to the puck (/bep)
+    WatchPuck,        // free-fly while looking at the puck (/wp)
+    WatchPuckGrid,    // auto-framed lead tracking (/wpg)
+    WatchPuckAbove,   // top-down follow (/wpa)
+    WatchPuckSmart,   // corner auto-switch (/wps)
+    WatchPuckSmart2,  // nearest-of-many auto-switch (/wps2)
+    WatchThirdPerson, // chase a specific player (/wpl)
+    StaticPosition,   // fixed preset position (/cpos)
+}
+
 public class Plugin : IPuckPlugin
 {
     public static string MOD_NAME = "ToasterCameras";
@@ -17,9 +33,23 @@ public class Plugin : IPuckPlugin
     static readonly Harmony harmony = new Harmony(MOD_GUID);
 
     public static List<PlayerCamera> becomePuckPlayerCameras = new List<PlayerCamera>();
-    public static bool client_spectatorIsPuck = false;
-    public static bool client_spectatorWatchPuck = false;
-    public static bool client_spectatorWatchPuckGrid = false;
+
+    // The single source of truth for which spectator camera mode is active.
+    // Use SetCameraMode() to change it so the camera always gets un-parented when
+    // leaving puck-follow.
+    public static CameraMode cameraMode = CameraMode.None;
+
+    // Switch to a camera mode, clearing any previous one. Every mode except Puck
+    // runs with the spectator camera un-parented; the Puck caller re-parents the
+    // camera to the puck transform itself after calling this.
+    public static void SetCameraMode(CameraMode mode)
+    {
+        cameraMode = mode;
+        if (mode != CameraMode.Puck && spectatorCamera != null &&
+            spectatorCamera.transform.parent != null)
+            spectatorCamera.transform.SetParent(null);
+    }
+
     // /wpg rotation clamps. Pitch.x in Unity is positive when looking down, so the
     // "max look-up" clamp is expressed as a negative pitch floor (e.g. -15 means
     // the camera can tilt up to 15° above horizontal but no further).
@@ -63,11 +93,7 @@ public class Plugin : IPuckPlugin
     public static float scrollZoomMinFov = 15f;
     public static float scrollZoomMaxFov = 90f;
     public static float scrollZoomSmoothTime = 0.12f;
-    public static bool client_spectatorWatchPuckAbove = false;
-    public static bool client_spectatorWatchPuckSmart = false;
-    public static bool client_spectatorWatchPuckSmart2 = false;
-    public static bool client_spectatorWatchThirdPerson = false;
-    public static bool client_spectatorStaticPositioning = false;
+    // Which preset is active while cameraMode == StaticPosition.
     public static string client_spectatorStaticPosition = "";
     public static bool client_cinematicSmoothingEnabled = false;
     public static InputAction cinematicSmoothingAction;
