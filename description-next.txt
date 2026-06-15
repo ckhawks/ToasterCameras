@@ -1,0 +1,74 @@
+Extended spectator camera features
+
+This plugin is intended to be used on the client, and will not be useful on a dedicated server.
+
+It adds a suite of spectator camera modes, automatic "broadcast" cameras, on-ice puck indicators, and quality-of-life camera tweaks — all controllable by chat commands, by keybinds, and (if you have ToasterReskinLoader installed) from an in-game settings menu.
+
+
+CAMERA MODES
+
+Each of these switches your spectator camera into a mode. They're mutually exclusive — picking one replaces the last. Use /watchoff to return to the game's default camera.
+
+/watchpuck /wp - Your camera will always look at the puck, but you can still fly around freely.
+/watchpuckgrid /wpg - Auto-framed broadcast camera. Leads ahead of the puck based on its velocity so the play in front of the puck stays framed, with smooth pitch/yaw that won't whip around on bounces.
+/watchpuckabove /wpa - Your camera will sit directly above the puck, but you can still move it up and down.
+/watchpucksmart /wps - Your camera will automatically shift to the corner of the rink that the puck is closest to. Fully autonomous.
+/watchpucksmart2 /wps2 /wpss - Your camera will automatically interpolate between various positions around the rink, and will cut between them. Fully autonomous.
+/watchplayer [number/name] /wpl - Follow a specific player in third person. Accepts a jersey number or a username.
+/watchplayer /wpl - With no argument, clears following a specific player.
+/becomepuck /bep - Attach your camera to the puck, become the puck.
+/cpos [position] - Jump to a saved static camera position (see Static positions below). Run /cpos with no argument to list the available position keys.
+/watchoff /wo - Turn off any spectator mode and return to the default camera.
+
+
+VISUAL FEATURES
+
+These are toggleable overlays and effects. Toggles are saved and restored across restarts.
+
+/beam - Toggle the puck beam: a vertical tracer beam above the puck, colored by the team that last touched it, so you can always spot the puck.
+/dfov /dynamicfov - Toggle dynamic FOV: the field of view zooms in and out automatically based on how far the camera is from the puck.
+/zoom /scrollzoom - Toggle scroll-wheel zoom: use the mouse wheel to manually zoom the camera in and out. (Takes precedence over dynamic FOV when both are on.)
+/circleopacity /copacity [0-1] - Set the opacity of the possession disc on the ice (0 = invisible, 1 = fully opaque). Run with no value to see the current setting.
+/where - Print the camera's current coordinates to chat (useful for authoring your own static positions).
+
+Possession disc - A flat disc on the ice beneath the puck, recolored to the team that last touched it and fading back to neutral after a few seconds. Toggle it from the settings menu (see below).
+
+
+KEYBINDS
+
+Many actions can be bound to keys. The following have sensible defaults out of the box:
+
+Watch player (third person), by team and roster slot (sorted C, LW, RW, LD, RD, G):
+  Blue team: 1, 2, 3, 4, 5, 6
+  Red team:  7, 8, 9, 0, -, =
+  (The 6th slot always selects the goalie if one exists.)
+
+Faceoff Normal static position: F
+
+Cinematic smoothing toggle: F9 - Smooths camera position and rotation for a cinematic feel. Adjustable smoothing amount in the settings.
+
+Slow down (hold): Left Alt - Hold to move the free-fly camera slowly for fine positioning. (Holding Sprint/Shift moves at 2x for fast repositioning.)
+
+The camera mode commands (become puck, watch puck, watch puck above, watch puck smart, watch puck smart 2, watch off) are unbound by default and can be assigned keys in the settings.
+
+
+CONFIGURATION
+
+All settings live in a JSON file next to the game: config/ToasterCameras.json. It's created with defaults on first run. You can edit it directly, or use the in-game menu.
+
+If you have ToasterReskinLoader installed, a "Cameras" page is added to its Reskin Manager menu where you can, with changes applied and saved immediately:
+- Toggle puck beam, dynamic FOV, and scroll-wheel zoom
+- Toggle the possession disc and set its opacity
+- Adjust cinematic smoothing (rotation and position smoothing amounts)
+- Disable quick chats while spectating
+- Rebind every camera mode and player-watch keybind interactively (click a binding, press a key; Esc cancels, ✕ unbinds)
+
+The config also holds the static camera positions (a key, friendly name, position, rotation, and optional keybind for each). A set of broadcast-style presets ship by default — faceoff angles, goal cameras, glass cameras, and zone cameras for both ends. Use /where to find coordinates for your own, then add them to the file.
+
+
+Need support with any of Toaster's Mods, or help with Puck modding in general? Join Toaster's Rink Discord server https://discord.gg/mCmX5dwzsj
+
+Enjoy my mods and want to support the time investment making mods for you? https://ko-fi.com/stellaric
+
+Source
+https://github.com/ckhawks/ToasterCameras

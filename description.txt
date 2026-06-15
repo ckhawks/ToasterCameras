@@ -1,0 +1,52 @@
+Extended spectator camera features
+
+This plugin is intended to be used on the client, and will not be useful on a dedicated server.
+
+Now updated for Puck b323.
+
+
+CAMERA MODES
+
+These switch your spectator camera into a mode. They're mutually exclusive — picking one replaces the last. Use /watchoff to return to the game's default camera.
+
+/watchpuck /wp - Your camera will always look at the puck, but you can still fly around freely.
+/watchpuckabove /wpa - Your camera will sit directly above the puck, but you can still move it up and down.
+/watchpucksmart /wps - Your camera will automatically shift to the corner of the rink that the puck is closest to. Fully autonomous.
+/watchpucksmart2 /wps2 /wpss - Your camera will automatically interpolate between various positions around the rink, and will cut between them. Fully autonomous.
+/watchplayer [number/name] /wpl - Follow a specific player in third person. Accepts a jersey number or a username.
+/watchplayer /wpl - With no argument, clears following a specific player.
+/becomepuck /bep - Attach your camera to the puck, become the puck.
+/cpos [position] - Jump to a saved static camera position (see Configuration below). Run /cpos with no argument to list the available position keys.
+/watchoff /wo - Turn off any spectator mode and return to the default camera.
+/where - Print the camera's current coordinates to chat (useful for authoring your own static positions).
+
+
+KEYBINDS
+
+Some actions are bound to keys by default:
+
+Watch player (third person), by team and roster slot (sorted C, LW, RW, LD, RD, G):
+  Blue team: 1, 2, 3, 4, 5, 6
+  Red team:  7, 8, 9, 0, -, =
+  (The 6th slot always selects the goalie if one exists.)
+
+Faceoff Normal static position: F
+
+Cinematic smoothing toggle: F9 - Smooths camera position and rotation for a cinematic feel.
+
+Slow down (hold): Left Alt - Hold to move the free-fly camera slowly for fine positioning. (Holding Sprint/Shift moves at 2x for fast repositioning.)
+
+
+CONFIGURATION
+
+All settings live in a JSON file next to the game: config/ToasterCameras.json. It's created with defaults on first run, and you can edit it directly.
+
+The config holds the static camera positions (a key, friendly name, position, rotation, and optional keybind for each), the keybinds above, cinematic smoothing amounts, and the option to disable quick chats while spectating. A set of broadcast-style presets ship by default — faceoff angles, goal cameras, glass cameras, and zone cameras for both ends. Use /where to find coordinates for your own, then add them to the file.
+
+
+Need support with any of Toaster's Mods, or help with Puck modding in general? Join Toaster's Rink Discord server https://discord.gg/mCmX5dwzsj
+
+Enjoy my mods and want to support the time investment making mods for you? https://ko-fi.com/stellaric
+
+Source
+https://github.com/ckhawks/ToasterCameras
