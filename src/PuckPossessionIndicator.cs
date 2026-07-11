@@ -262,6 +262,8 @@ public class PuckIndicatorRunner : MonoBehaviour
     {
         PuckPossessionIndicator.TickAll();
         PuckBeam.TickAll();
+        // TRL may finish loading after us, so keep retrying registration until it takes.
+        TRLSettingsPanel.TickRegister();
     }
 }
 

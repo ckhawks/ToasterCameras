@@ -20,23 +20,29 @@ public static class TRLSettingsPanel
 {
     private const string PanelId = "ToasterCameras";
 
-    // Reflected once on first use; null when TRL isn't present (so we silently do nothing).
-    private static bool _resolved;
+    // Reflected on first successful resolve; null until TRL's assembly is loaded.
     private static MethodInfo _register;
     private static MethodInfo _uiNote, _uiSeparator, _uiHeader, _uiToggle, _uiSlider;
 
+    // Registration is retried each frame (via TickRegister) until it succeeds, because TRL may
+    // load after we do — if we resolved once at OnEnable and TRL wasn't in AppDomain yet, we'd
+    // never register. _done latches once we've either registered or given up waiting.
+    private static bool _done;
+    private static float _waitedSeconds;
+    private const float GiveUpAfterSeconds = 30f;
+
     /// <summary>
-    /// Adds the Cameras page to TRL's menu. Safe to call when TRL isn't installed — it just
-    /// no-ops. Call once from the plugin's OnEnable after settings are loaded.
+    /// Attempts to add the Cameras page to TRL's menu, returning true once registered. Safe to
+    /// call when TRL isn't (yet) present — it just returns false. Because TRL can load after us,
+    /// call this once from OnEnable for the common case and then drive TickRegister each frame so
+    /// a late-loading TRL still gets the panel.
     /// </summary>
-    public static void TryRegister()
+    public static bool TryRegister()
     {
+        if (_done) return _register != null;
+
         Resolve();
-        if (_register == null)
-        {
-            Plugin.Log("ToasterReskinLoader not detected; skipping settings panel registration.");
-            return;
-        }
+        if (_register == null) return false; // TRL not loaded yet — caller should retry later.
 
         try
         {
@@ -49,12 +55,32 @@ public static class TRLSettingsPanel
         {
             Plugin.LogError($"Failed to register settings panel with TRL: {e.Message}");
         }
+
+        _done = true;
+        return true;
+    }
+
+    /// <summary>
+    /// Per-frame retry driver. Keeps attempting registration until TRL shows up, then stops.
+    /// Gives up (and logs once) after <see cref="GiveUpAfterSeconds"/> so we don't scan the
+    /// AppDomain forever when TRL simply isn't installed. Cheap no-op once done.
+    /// </summary>
+    public static void TickRegister()
+    {
+        if (_done) return;
+        if (TryRegister()) return;
+
+        _waitedSeconds += Time.unscaledDeltaTime;
+        if (_waitedSeconds >= GiveUpAfterSeconds)
+        {
+            _done = true;
+            Plugin.Log("ToasterReskinLoader not detected; skipping settings panel registration.");
+        }
     }
 
     private static void Resolve()
     {
-        if (_resolved) return;
-        _resolved = true;
+        if (_register != null) return; // already resolved
 
         try
         {
