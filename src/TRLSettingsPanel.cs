@@ -115,7 +115,7 @@ public static class TRLSettingsPanel
             if (!v && PuckManager.Instance != null)
                 foreach (var p in PuckManager.Instance.GetPucks(false))
                     PuckBeam.Cleanup(p);
-            s.puckBeamEnabled = v;
+            s.puckBeamOn = v;
             s.Save();
         });
         Toggle(root, "Dynamic FOV", Plugin.client_dynamicFovEnabled, v =>
@@ -137,7 +137,7 @@ public static class TRLSettingsPanel
         Toggle(root, "Show possession disc", PuckPossessionIndicator.enabled, v =>
         {
             PuckPossessionIndicator.enabled = v;
-            s.possessionDiscEnabled = v;
+            s.possessionDiscOn = v;
             s.Save();
         });
         Slider(root, "Opacity", 0f, 1f, s.possessionCircle?.opacity ?? 0.75f,

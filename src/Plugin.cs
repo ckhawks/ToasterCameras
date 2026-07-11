@@ -137,8 +137,8 @@ public class Plugin : IPuckPlugin
 
                 // Restore persisted feature toggles to their live state (they reset to defaults
                 // otherwise). The chat commands and TRL menu both write these back when changed.
-                PuckBeam.enabled = modSettings.puckBeamEnabled;
-                PuckPossessionIndicator.enabled = modSettings.possessionDiscEnabled;
+                PuckBeam.enabled = modSettings.puckBeamOn;
+                PuckPossessionIndicator.enabled = modSettings.possessionDiscOn;
                 client_dynamicFovEnabled = modSettings.dynamicFovEnabled;
                 client_scrollZoomEnabled = modSettings.scrollZoomEnabled;
                 if (client_scrollZoomEnabled) scrollZoomNeedsInit = true;

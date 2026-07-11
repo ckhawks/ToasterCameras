@@ -86,10 +86,16 @@ public class ModSettings
     // built-in defaults each launch. Defaults mirror the live defaults in Plugin / PuckBeam /
     // PuckPossessionIndicator. Loaded into those live fields at startup (see Plugin.OnEnable);
     // both the chat commands and the TRL menu keep them in sync.
-    public bool puckBeamEnabled { get; set; } = true;
     public bool dynamicFovEnabled { get; set; } = false;
     public bool scrollZoomEnabled { get; set; } = false;
-    public bool possessionDiscEnabled { get; set; } = true;
+
+    // Puck beam and the possession disc were accidentally shipped defaulting ON, and the update
+    // persisted that into a lot of users' configs. To reset everyone back to OFF we renamed these
+    // keys: the old puckBeamEnabled / possessionDiscEnabled values in existing configs no longer
+    // deserialize into anything, so these new keys are absent and pick up the false default. The
+    // orphaned old keys drop out of the JSON on the next Save().
+    public bool puckBeamOn { get; set; } = false;
+    public bool possessionDiscOn { get; set; } = false;
 
     static string ConfigurationFileName = $"{Plugin.MOD_NAME}.json";
 

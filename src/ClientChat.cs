@@ -156,7 +156,7 @@ public static class ClientChat
                 }
                 if (Plugin.modSettings != null)
                 {
-                    Plugin.modSettings.puckBeamEnabled = PuckBeam.enabled;
+                    Plugin.modSettings.puckBeamOn = PuckBeam.enabled;
                     Plugin.modSettings.Save();
                 }
                 ChatHelper.AddSystemMessage(
