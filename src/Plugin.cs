@@ -27,7 +27,7 @@ public enum CameraMode
 public class Plugin : IPuckPlugin
 {
     public static string MOD_NAME = "ToasterCameras";
-    public static string MOD_VERSION = "1.0.0";
+    public static string MOD_VERSION = "1.0.1";
     public static string MOD_GUID = "pw.stellaric.toaster.cameras";
 
     static readonly Harmony harmony = new Harmony(MOD_GUID);
