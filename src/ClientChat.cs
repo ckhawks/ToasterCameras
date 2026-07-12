@@ -17,8 +17,22 @@ public static class ClientChat
         [HarmonyPrefix]
         private static bool Prefix(ChatManager __instance, string content, bool isQuickChat, bool isTeamChat)
         {
-            // Don't intercept quick chats here — let them flow through.
-            if (isQuickChat) return true;
+            // Quick chats aren't slash commands, so normally we let them flow
+            // through. But this is also the common send chokepoint: the vanilla
+            // number-key path AND other mods (ToasterQuickChatPlus re-sends here
+            // after replacing Client_QuickChatAction) all funnel through
+            // Client_SendChatMessage. So enforce the spectator quick-chat block
+            // here too — this catches the sends that bypass Client_QuickChatAction.
+            // Send-only, so it never suppresses seeing others' quick chats.
+            if (isQuickChat)
+            {
+                if (PatchDisableQuickChatAsSpectator.ShouldSuppressLocalQuickChat())
+                {
+                    Plugin.Log("Ignoring quick chat send because local player is in spectator");
+                    return false;
+                }
+                return true;
+            }
 
             if (string.IsNullOrEmpty(content)) return true;
             string[] messageParts = content.Split(' ');
@@ -29,6 +43,12 @@ public static class ClientChat
                 // reparent spams "only the server can re-parent" every frame. TickPuck
                 // already copies the puck's position/rotation each frame.
                 Plugin.SetCameraMode(CameraMode.Puck);
+                return false;
+            }
+
+            if (messageParts[0].Equals("/becomepuckfree", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/bepf", StringComparison.OrdinalIgnoreCase))
+            {
+                Plugin.SetCameraMode(CameraMode.PuckFreeLook);
                 return false;
             }
 
@@ -211,17 +231,6 @@ public static class ClientChat
                 }
                 ChatHelper.AddSystemMessage(
                     $"<s>-></s> Scroll-wheel zoom {(Plugin.client_scrollZoomEnabled ? "<color=green>enabled</color> — use the mouse wheel to zoom" : "<color=red>disabled</color>")}.");
-                return false;
-            }
-
-            if (messageParts[0].Equals("/wpgdebug", StringComparison.OrdinalIgnoreCase) ||
-                messageParts[0].Equals("/wpgd", StringComparison.OrdinalIgnoreCase))
-            {
-                WatchPuckGridDebug.SetEnabled(!WatchPuckGridDebug.enabled);
-                ChatHelper.AddSystemMessage(
-                    $"<s>-></s> /wpg diagnostics {(WatchPuckGridDebug.enabled ? "<color=green>enabled</color> — world markers + on-screen HUD + ~1/s logs" : "<color=red>disabled</color>")}." +
-                    (WatchPuckGridDebug.enabled && Plugin.cameraMode != CameraMode.WatchPuckGrid
-                        ? " <color=yellow>Switch to /wpg to see it.</color>" : ""));
                 return false;
             }
 

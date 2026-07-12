@@ -15,6 +15,7 @@ public enum CameraMode
 {
     None,             // game's default camera behavior (no override)
     Puck,             // camera parented to the puck (/bep)
+    PuckFreeLook,     // camera rides the puck's position, free mouse aim (/bepf)
     WatchPuck,        // free-fly while looking at the puck (/wp)
     WatchPuckGrid,    // auto-framed lead tracking (/wpg)
     WatchPuckAbove,   // top-down follow (/wpa)
@@ -107,6 +108,7 @@ public class Plugin : IPuckPlugin
     public static ModSettings modSettings;
     public static InputAction[] cameraPositionActions;
     public static InputAction becomePuckAction;
+    public static InputAction becomePuckFreeAction;
     public static InputAction watchPuckAction;
     public static InputAction watchPuckGridAction;
     public static InputAction watchPuckAboveAction;
@@ -157,9 +159,6 @@ public class Plugin : IPuckPlugin
                 runnerGo.hideFlags = HideFlags.HideAndDontSave;
                 UnityEngine.Object.DontDestroyOnLoad(runnerGo);
                 runnerGo.AddComponent<PuckIndicatorRunner>();
-                // /wpg diagnostics overlay (world markers + IMGUI HUD). Inert
-                // until toggled on with /wpgdebug.
-                runnerGo.AddComponent<WpgDebugOverlay>();
 
                 // Contribute a Cameras page to ToasterReskinLoader's menu when TRL is present
                 // (soft dependency — no-ops if it isn't installed).

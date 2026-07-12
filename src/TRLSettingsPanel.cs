@@ -200,6 +200,7 @@ public static class TRLSettingsPanel
 
         var m = s.cameraModes ??= new CameraModeKeybinds();
         RebindRow(root, "Become puck", () => m.becomePuck, v => m.becomePuck = v, CameraKeybinds.InitializeCameraModeKeybinds);
+        RebindRow(root, "Become puck (free look)", () => m.becomePuckFree, v => m.becomePuckFree = v, CameraKeybinds.InitializeCameraModeKeybinds);
         RebindRow(root, "Watch puck", () => m.watchPuck, v => m.watchPuck = v, CameraKeybinds.InitializeCameraModeKeybinds);
         RebindRow(root, "Watch puck (grid)", () => m.watchPuckGrid, v => m.watchPuckGrid = v, CameraKeybinds.InitializeCameraModeKeybinds);
         RebindRow(root, "Watch puck (above)", () => m.watchPuckAbove, v => m.watchPuckAbove = v, CameraKeybinds.InitializeCameraModeKeybinds);

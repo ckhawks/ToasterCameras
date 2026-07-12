@@ -17,6 +17,7 @@ Each of these switches your spectator camera into a mode. They're mutually exclu
 /watchplayer [number/name] /wpl - Follow a specific player in third person. Accepts a jersey number or a username.
 /watchplayer /wpl - With no argument, clears following a specific player.
 /becomepuck /bep - Attach your camera to the puck, become the puck.
+/becomepuckfree /bepf - Like /becomepuck, but only your camera's position rides the puck — you can still look around freely with the mouse.
 /cpos [position] - Jump to a saved static camera position (see Static positions below). Run /cpos with no argument to list the available position keys.
 /watchoff /wo - Turn off any spectator mode and return to the default camera.
 
@@ -30,7 +31,6 @@ These are toggleable overlays and effects. Toggles are saved and restored across
 /zoom /scrollzoom - Toggle scroll-wheel zoom: use the mouse wheel to manually zoom the camera in and out. (Takes precedence over dynamic FOV when both are on.)
 /circleopacity /copacity [0-1] - Set the opacity of the possession disc on the ice (0 = invisible, 1 = fully opaque). Run with no value to see the current setting.
 /where - Print the camera's current coordinates to chat (useful for authoring your own static positions).
-/wpgdebug /wpgd - Toggle diagnostics for the /wpg broadcast camera: world-space markers for every puck it sees (green = live, yellow = replay), the framed centroid, the lead point, and the final aim target, plus an on-screen readout of the internal tracking state. Also marks every other spectator's camera (orange, labeled by name) so you can see where everyone else is watching from. For troubleshooting the auto-framing.
 
 Possession disc - A flat disc on the ice beneath the puck, recolored to the team that last touched it and fading back to neutral after a few seconds. Toggle it from the settings menu (see below).
 
@@ -50,7 +50,7 @@ Cinematic smoothing toggle: F9 - Smooths camera position and rotation for a cine
 
 Slow down (hold): Left Alt - Hold to move the free-fly camera slowly for fine positioning. (Holding Sprint/Shift moves at 2x for fast repositioning.)
 
-The camera mode commands (become puck, watch puck, watch puck grid, watch puck above, watch puck smart, watch puck smart 2, watch off) are unbound by default and can be assigned keys in the settings.
+The camera mode commands (become puck, become puck free look, watch puck, watch puck grid, watch puck above, watch puck smart, watch puck smart 2, watch off) are unbound by default and can be assigned keys in the settings.
 
 
 CONFIGURATION

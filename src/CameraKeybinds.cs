@@ -125,6 +125,7 @@ public static class CameraKeybinds
 
         // Replace any existing actions (live rebind re-runs this).
         Free(ref Plugin.becomePuckAction);
+        Free(ref Plugin.becomePuckFreeAction);
         Free(ref Plugin.watchPuckAction);
         Free(ref Plugin.watchPuckGridAction);
         Free(ref Plugin.watchPuckAboveAction);
@@ -141,6 +142,13 @@ public static class CameraKeybinds
             Plugin.becomePuckAction = new InputAction(binding: modes.becomePuck);
             Plugin.becomePuckAction.Enable();
             Plugin.Log($"Registered keybind '{modes.becomePuck}' for Become Puck");
+        }
+
+        if (!string.IsNullOrEmpty(modes.becomePuckFree))
+        {
+            Plugin.becomePuckFreeAction = new InputAction(binding: modes.becomePuckFree);
+            Plugin.becomePuckFreeAction.Enable();
+            Plugin.Log($"Registered keybind '{modes.becomePuckFree}' for Become Puck (free look)");
         }
 
         if (!string.IsNullOrEmpty(modes.watchPuck))
@@ -237,6 +245,11 @@ public static class CameraKeybinds
                 // reparent spams "only the server can re-parent" every frame. TickPuck
                 // already copies the puck's position/rotation each frame.
                 Plugin.SetCameraMode(CameraMode.Puck);
+            });
+
+            CheckCameraModeKeybind("becomePuckFree", Plugin.becomePuckFreeAction, () =>
+            {
+                Plugin.SetCameraMode(CameraMode.PuckFreeLook);
             });
 
             CheckCameraModeKeybind("watchPuck", Plugin.watchPuckAction, () =>

@@ -19,6 +19,7 @@ public class CameraPosition
 public class CameraModeKeybinds
 {
     public string becomePuck { get; set; } = "";
+    public string becomePuckFree { get; set; } = "";
     public string watchPuck { get; set; } = "";
     public string watchPuckGrid { get; set; } = "";
     public string watchPuckAbove { get; set; } = "";

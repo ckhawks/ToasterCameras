@@ -4,6 +4,22 @@ namespace ToasterCameras;
 
 public static class PatchDisableQuickChatAsSpectator
 {
+    // True when the "disable quick chats while spectating" option is on and the
+    // local player is currently a spectator (not on Blue/Red). Shared by every
+    // quick-chat block point below and by ClientChat's send-message patch.
+    public static bool ShouldSuppressLocalQuickChat()
+    {
+        if (Plugin.modSettings == null || !Plugin.modSettings.disableQuickChatsInSpectator) return false;
+
+        var pm = PlayerManager.Instance;
+        if (pm == null) return false;
+
+        var local = pm.GetLocalPlayer();
+        if (local == null) return false;
+
+        return local.Team != PlayerTeam.Blue && local.Team != PlayerTeam.Red;
+    }
+
     // In b323 the number-key flow goes through ChatManager.Client_QuickChatAction,
     // which calls Client_SendChatMessageRpc directly — bypassing the public
     // Client_SendChatMessage. Block at Client_QuickChatAction so both the
@@ -15,15 +31,7 @@ public static class PatchDisableQuickChatAsSpectator
         [HarmonyPrefix]
         private static bool Prefix(int index)
         {
-            if (Plugin.modSettings == null || !Plugin.modSettings.disableQuickChatsInSpectator) return true;
-
-            PlayerManager pm = PlayerManager.Instance;
-            if (pm == null) return true;
-
-            var local = pm.GetLocalPlayer();
-            if (local == null) return true;
-
-            if (local.Team != PlayerTeam.Blue && local.Team != PlayerTeam.Red)
+            if (ShouldSuppressLocalQuickChat())
             {
                 Plugin.Log($"Ignoring quick chat action ({index}) because local player is in spectator");
                 return false;
@@ -43,15 +51,8 @@ public static class PatchDisableQuickChatAsSpectator
         private static bool Prefix(bool isEnabled)
         {
             if (!isEnabled) return true;
-            if (Plugin.modSettings == null || !Plugin.modSettings.disableQuickChatsInSpectator) return true;
 
-            PlayerManager pm = PlayerManager.Instance;
-            if (pm == null) return true;
-
-            var local = pm.GetLocalPlayer();
-            if (local == null) return true;
-
-            if (local.Team != PlayerTeam.Blue && local.Team != PlayerTeam.Red)
+            if (ShouldSuppressLocalQuickChat())
             {
                 Plugin.Log("Ignoring SetQuickChatEnabled(true) because local player is in spectator");
                 return false;
