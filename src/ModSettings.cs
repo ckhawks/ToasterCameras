@@ -20,6 +20,7 @@ public class CameraModeKeybinds
 {
     public string becomePuck { get; set; } = "";
     public string watchPuck { get; set; } = "";
+    public string watchPuckGrid { get; set; } = "";
     public string watchPuckAbove { get; set; } = "";
     public string watchPuckSmart { get; set; } = "";
     public string watchPuckSmart2 { get; set; } = "";

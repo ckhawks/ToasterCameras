@@ -108,6 +108,7 @@ public class Plugin : IPuckPlugin
     public static InputAction[] cameraPositionActions;
     public static InputAction becomePuckAction;
     public static InputAction watchPuckAction;
+    public static InputAction watchPuckGridAction;
     public static InputAction watchPuckAboveAction;
     public static InputAction watchPuckSmartAction;
     public static InputAction watchPuckSmart2Action;
@@ -156,6 +157,9 @@ public class Plugin : IPuckPlugin
                 runnerGo.hideFlags = HideFlags.HideAndDontSave;
                 UnityEngine.Object.DontDestroyOnLoad(runnerGo);
                 runnerGo.AddComponent<PuckIndicatorRunner>();
+                // /wpg diagnostics overlay (world markers + IMGUI HUD). Inert
+                // until toggled on with /wpgdebug.
+                runnerGo.AddComponent<WpgDebugOverlay>();
 
                 // Contribute a Cameras page to ToasterReskinLoader's menu when TRL is present
                 // (soft dependency — no-ops if it isn't installed).

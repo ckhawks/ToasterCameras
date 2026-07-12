@@ -25,13 +25,10 @@ public static class ClientChat
 
             if (messageParts[0].Equals("/becomepuck", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/bep", StringComparison.OrdinalIgnoreCase))
             {
+                // Don't SetParent onto the puck — it's a NetworkObject, so the client
+                // reparent spams "only the server can re-parent" every frame. TickPuck
+                // already copies the puck's position/rotation each frame.
                 Plugin.SetCameraMode(CameraMode.Puck);
-                if (Plugin.spectatorCamera != null && PuckManager.Instance != null && PuckManager.Instance.GetPuck() != null)
-                {
-                    Plugin.spectatorCamera.transform.SetParent(PuckManager.Instance.GetPuck().transform);
-                    Plugin.spectatorCamera.transform.localPosition = Vector3.zero;
-                    Plugin.spectatorCamera.transform.localRotation = Quaternion.identity;
-                }
                 return false;
             }
 
@@ -214,6 +211,17 @@ public static class ClientChat
                 }
                 ChatHelper.AddSystemMessage(
                     $"<s>-></s> Scroll-wheel zoom {(Plugin.client_scrollZoomEnabled ? "<color=green>enabled</color> — use the mouse wheel to zoom" : "<color=red>disabled</color>")}.");
+                return false;
+            }
+
+            if (messageParts[0].Equals("/wpgdebug", StringComparison.OrdinalIgnoreCase) ||
+                messageParts[0].Equals("/wpgd", StringComparison.OrdinalIgnoreCase))
+            {
+                WatchPuckGridDebug.SetEnabled(!WatchPuckGridDebug.enabled);
+                ChatHelper.AddSystemMessage(
+                    $"<s>-></s> /wpg diagnostics {(WatchPuckGridDebug.enabled ? "<color=green>enabled</color> — world markers + on-screen HUD + ~1/s logs" : "<color=red>disabled</color>")}." +
+                    (WatchPuckGridDebug.enabled && Plugin.cameraMode != CameraMode.WatchPuckGrid
+                        ? " <color=yellow>Switch to /wpg to see it.</color>" : ""));
                 return false;
             }
 

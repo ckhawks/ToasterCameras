@@ -58,7 +58,8 @@ public static class PatchPlayerCamera
         private static float gridYawVel;
         private static float gridPitchVel;
 
-        // TEMP /wpg diagnostic: throttle so we log at most ~1/sec.
+        // /wpg debug: throttle the diagnostic log to ~1/sec (only logs while
+        // WatchPuckGridDebug.enabled).
         private static float gridDiagTimer;
 
         // Harmony prefix entry point. Kept deliberately thin: update the always-on
@@ -69,6 +70,25 @@ public static class PatchPlayerCamera
         [HarmonyPrefix]
         public static bool Prefix(SpectatorCamera __instance, float deltaTime)
         {
+            // SpectatorCamera is a NetworkObject: every player/spectator in the
+            // session has their own, all replicated to this client, but only the
+            // local player's is IsOwner. The game's own OnTick early-returns for
+            // non-owners (see SpectatorCamera.OnTick: `if (!base.IsOwner) return;`)
+            // and so must we — for EVERYTHING below, FOV control included.
+            //
+            // Without this guard we run the whole prefix for every spectator camera
+            // in the match, and all the state it drives is static/shared:
+            //   * the mode smoothing (gridYawVel / gridPitchVel /
+            //     watchPuckGridSmoothedVelocity) — remote cameras at their own
+            //     positions stomp the local camera's smoothing every frame, swinging
+            //     /wpg (and the other look-at modes) off the puck toward the boards;
+            //   * dynamic-FOV smoothing (_dynamicFovCurrent / _dynamicFovVel /
+            //     _dynamicFovOriginal) — likewise corrupted, and worse, when a remote
+            //     camera's own Camera is null/disabled UpdateFieldOfView falls back to
+            //     Camera.main (the LOCAL render camera) and drives its FOV from the
+            //     remote camera's distance-to-puck. That's the erratic /dfov behavior.
+            if (!__instance.IsOwner) return true;
+
             elapsedTime += Time.deltaTime;
             Plugin.spectatorCamera = __instance;
 
@@ -328,12 +348,20 @@ public static class PatchPlayerCamera
             // room in frame. The target is the centroid of all live pucks (see
             // GetWatchTarget); with one puck that's just the puck. With no
             // pucks on the ice, fall back to a fixed point above center ice.
+            // Diagnostic captures for /wpg debug (only meaningful while the
+            // debug overlay is on). Seeded to the no-target values.
+            var diagRawVel = Vector3.zero;
+            var diagLeadRaw = new Vector3(0f, 2f, 0f);
+            var diagLeadAngle = 0f;
+            var diagLeadClamp = false;
+
             Vector3 aimTarget;
             var target = GetWatchTarget();
             if (target.HasTarget)
             {
                 var rawVel = target.Velocity;
                 rawVel.y = 0f;
+                diagRawVel = rawVel;
                 // Exponential smoothing on the velocity vector so the lead
                 // doesn't snap on bounces / network jitter.
                 var alpha = 1f - Mathf.Exp(-deltaTime * Plugin.watchPuckGridLeadVelocitySmoothing);
@@ -341,6 +369,7 @@ public static class PatchPlayerCamera
                     Plugin.watchPuckGridSmoothedVelocity, rawVel, alpha);
                 var puckPos = target.Position;
                 var leadPos = puckPos + Plugin.watchPuckGridSmoothedVelocity * Plugin.watchPuckGridLeadSeconds;
+                diagLeadRaw = leadPos;
 
                 // Clamp the lead so the puck never gets pushed outside the
                 // center cell of the framing grid. Constraint: the angle
@@ -351,10 +380,12 @@ public static class PatchPlayerCamera
                 if (camToPuck.sqrMagnitude > 0.01f && camToLead.sqrMagnitude > 0.01f)
                 {
                     var angle = Vector3.Angle(camToPuck, camToLead);
+                    diagLeadAngle = angle;
                     if (angle > Plugin.watchPuckGridMaxLeadAngleDeg && angle > 0.001f)
                     {
                         var t = Plugin.watchPuckGridMaxLeadAngleDeg / angle;
                         leadPos = Vector3.Lerp(puckPos, leadPos, t);
+                        diagLeadClamp = true;
                     }
                 }
                 aimTarget = leadPos;
@@ -362,6 +393,7 @@ public static class PatchPlayerCamera
             else
             {
                 aimTarget = new Vector3(0f, 2f, 0f);
+                diagLeadRaw = aimTarget;
                 Plugin.watchPuckGridSmoothedVelocity = Vector3.zero;
             }
 
@@ -393,14 +425,16 @@ public static class PatchPlayerCamera
                 var targetPitch = Mathf.Atan2(-toTarget.y, horizDist) * Mathf.Rad2Deg;
                 targetPitch = Mathf.Max(targetPitch, -Plugin.watchPuckGridMaxLookUpDeg);
 
-                // TEMP diagnostic: remember the unclamped heading and whether
-                // the center clamp actually moved it.
+                // Diagnostic: remember the unclamped heading and whether the
+                // center clamp actually moved it.
                 var diagRawYaw = targetYaw;
                 var diagCenterYaw = float.NaN;
+                var diagYawDev = 0f;
                 var diagClampEngaged = false;
 
                 var toCenter = -cam.transform.position; // rink center is (0,0,0)
                 toCenter.y = 0f;
+                var diagDistFromCenter = toCenter.magnitude;
                 if (toCenter.sqrMagnitude > 25f) // > 5m from center
                 {
                     var centerYaw = Mathf.Atan2(toCenter.x, toCenter.z) * Mathf.Rad2Deg;
@@ -409,26 +443,8 @@ public static class PatchPlayerCamera
                         Plugin.watchPuckGridYawDeviationDeg);
                     targetYaw = centerYaw + clampedDelta;
                     diagCenterYaw = centerYaw;
+                    diagYawDev = delta;
                     diagClampEngaged = !Mathf.Approximately(delta, clampedDelta);
-                }
-
-                // TEMP /wpg diagnostic: ~1/sec, report how many pucks are actually
-                // detected (live vs replay) plus the raw→clamped yaw, so we can
-                // confirm there's really one puck and see if the center clamp is
-                // what's pulling the camera off the puck. Remove once diagnosed.
-                gridDiagTimer += deltaTime;
-                if (gridDiagTimer >= 1f)
-                {
-                    gridDiagTimer = 0f;
-                    var pmDiag = PuckManager.Instance;
-                    var liveDiag = pmDiag != null ? pmDiag.GetPucks() : null;
-                    var replayDiag = pmDiag != null ? pmDiag.GetReplayPucks() : null;
-                    var liveCount = liveDiag != null ? liveDiag.Count : -1;
-                    var replayCount = replayDiag != null ? replayDiag.Count : -1;
-                    Plugin.Log(
-                        $"/wpg diag: live={liveCount} replay={replayCount} targetCount={target.Count} " +
-                        $"aim={aimTarget} rawYaw={diagRawYaw:F1} centerYaw={diagCenterYaw:F1} " +
-                        $"clampedYaw={targetYaw:F1} clampEngaged={diagClampEngaged} camPos={cam.transform.position}");
                 }
 
                 var viewportInside = true;
@@ -442,6 +458,36 @@ public static class PatchPlayerCamera
                     viewportInside = viewport.z > 0f &&
                                      viewport.x >= minEdge && viewport.x <= maxEdge &&
                                      viewport.y >= minEdge && viewport.y <= maxEdge;
+                }
+
+                // Publish the full internal state to the /wpg debug overlay and
+                // emit a throttled log line — but only while debug is on, so this
+                // costs nothing (no per-puck iteration, no alloc) in normal play.
+                if (WatchPuckGridDebug.enabled)
+                {
+                    var pmDiag = PuckManager.Instance;
+                    var liveDiag = pmDiag != null ? pmDiag.GetPucks() : null;
+                    var replayDiag = pmDiag != null ? pmDiag.GetReplayPucks() : null;
+                    var usingReplay = liveDiag == null || liveDiag.Count == 0;
+                    WatchPuckGridDebug.Publish(
+                        liveDiag, replayDiag, usingReplay,
+                        target.HasTarget, target.Position, diagRawVel,
+                        Plugin.watchPuckGridSmoothedVelocity, diagLeadRaw, aimTarget,
+                        diagLeadAngle, diagLeadClamp,
+                        diagRawYaw, diagCenterYaw, targetYaw, diagYawDev, diagClampEngaged,
+                        targetPitch, viewportInside, cam.transform.position, current.y,
+                        current.x, toTarget.magnitude, diagDistFromCenter);
+
+                    gridDiagTimer += deltaTime;
+                    if (gridDiagTimer >= 1f)
+                    {
+                        gridDiagTimer = 0f;
+                        Plugin.Log(
+                            $"/wpg diag: live={WatchPuckGridDebug.LiveCount} replay={WatchPuckGridDebug.ReplayCount} " +
+                            $"targetCount={target.Count} aim={aimTarget} rawYaw={diagRawYaw:F1} " +
+                            $"centerYaw={diagCenterYaw:F1} yawDev={diagYawDev:F1} clampedYaw={targetYaw:F1} " +
+                            $"centerClamp={diagClampEngaged} leadClamp={diagLeadClamp} camPos={cam.transform.position}");
+                    }
                 }
 
                 var smoothTime = viewportInside ? 1.2f : 0.8f;

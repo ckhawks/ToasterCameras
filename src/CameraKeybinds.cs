@@ -126,6 +126,7 @@ public static class CameraKeybinds
         // Replace any existing actions (live rebind re-runs this).
         Free(ref Plugin.becomePuckAction);
         Free(ref Plugin.watchPuckAction);
+        Free(ref Plugin.watchPuckGridAction);
         Free(ref Plugin.watchPuckAboveAction);
         Free(ref Plugin.watchPuckSmartAction);
         Free(ref Plugin.watchPuckSmart2Action);
@@ -147,6 +148,13 @@ public static class CameraKeybinds
             Plugin.watchPuckAction = new InputAction(binding: modes.watchPuck);
             Plugin.watchPuckAction.Enable();
             Plugin.Log($"Registered keybind '{modes.watchPuck}' for Watch Puck");
+        }
+
+        if (!string.IsNullOrEmpty(modes.watchPuckGrid))
+        {
+            Plugin.watchPuckGridAction = new InputAction(binding: modes.watchPuckGrid);
+            Plugin.watchPuckGridAction.Enable();
+            Plugin.Log($"Registered keybind '{modes.watchPuckGrid}' for Watch Puck Grid");
         }
 
         if (!string.IsNullOrEmpty(modes.watchPuckAbove))
@@ -225,15 +233,20 @@ public static class CameraKeybinds
                 if (PuckManager.Instance == null || PuckManager.Instance.GetPuck() == null ||
                     Plugin.spectatorCamera == null) return;
 
+                // Don't SetParent onto the puck — it's a NetworkObject, so the client
+                // reparent spams "only the server can re-parent" every frame. TickPuck
+                // already copies the puck's position/rotation each frame.
                 Plugin.SetCameraMode(CameraMode.Puck);
-                Plugin.spectatorCamera.transform.SetParent(PuckManager.Instance.GetPuck().transform);
-                Plugin.spectatorCamera.transform.localPosition = Vector3.zero;
-                Plugin.spectatorCamera.transform.localRotation = Quaternion.identity;
             });
 
             CheckCameraModeKeybind("watchPuck", Plugin.watchPuckAction, () =>
             {
                 Plugin.SetCameraMode(CameraMode.WatchPuck);
+            });
+
+            CheckCameraModeKeybind("watchPuckGrid", Plugin.watchPuckGridAction, () =>
+            {
+                Plugin.SetCameraMode(CameraMode.WatchPuckGrid);
             });
 
             CheckCameraModeKeybind("watchPuckAbove", Plugin.watchPuckAboveAction, () =>
