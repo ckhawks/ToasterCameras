@@ -206,6 +206,8 @@ public static class TRLSettingsPanel
         RebindRow(root, "Watch puck (above)", () => m.watchPuckAbove, v => m.watchPuckAbove = v, CameraKeybinds.InitializeCameraModeKeybinds);
         RebindRow(root, "Watch puck (smart)", () => m.watchPuckSmart, v => m.watchPuckSmart = v, CameraKeybinds.InitializeCameraModeKeybinds);
         RebindRow(root, "Watch puck (smart 2)", () => m.watchPuckSmart2, v => m.watchPuckSmart2 = v, CameraKeybinds.InitializeCameraModeKeybinds);
+        RebindRow(root, "Watch puck carrier", () => m.watchCarrier, v => m.watchCarrier = v, CameraKeybinds.InitializeCameraModeKeybinds);
+        RebindRow(root, "Director", () => m.director, v => m.director = v, CameraKeybinds.InitializeCameraModeKeybinds);
         RebindRow(root, "Watch off", () => m.watchOff, v => m.watchOff = v, CameraKeybinds.InitializeCameraModeKeybinds);
         RebindRow(root, "Cinematic smoothing toggle", () => m.cinematicSmoothing, v => m.cinematicSmoothing = v, CameraKeybinds.InitializeCameraModeKeybinds);
         RebindRow(root, "Slow down (hold)", () => m.slowDown, v => m.slowDown = v, CameraKeybinds.InitializeCameraModeKeybinds);

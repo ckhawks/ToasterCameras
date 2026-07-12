@@ -64,6 +64,17 @@ public static class PatchPlayerCamera
         private static float bepFreePitch;
         private static bool bepFreeInit;
 
+        // /wc carrier-follow state: the player currently being followed, plus the
+        // debounce candidate and when it became the last-toucher.
+        private static Player carrierToWatch;
+        private static Player carrierCandidate;
+        private static float carrierCandidateSince;
+
+        // /director state: last phase seen (a change is a hard-cut boundary) and
+        // the SmoothDamp velocity used for the smooth follow during open play.
+        private static GamePhase directorLastPhase = GamePhase.None;
+        private static Vector3 directorVel = Vector3.zero;
+
         // Harmony prefix entry point. Kept deliberately thin: update the always-on
         // FOV control, bail out when the local player isn't a spectator, then hand
         // off to the one method that owns the active camera mode. Each Tick* method
@@ -124,6 +135,8 @@ public static class PatchPlayerCamera
                 case CameraMode.WatchThirdPerson: return TickWatchThirdPerson(__instance);
                 case CameraMode.WatchPuckSmart: return TickWatchPuckSmart(__instance);
                 case CameraMode.WatchPuckSmart2: return TickWatchPuckSmart2(__instance);
+                case CameraMode.WatchCarrier: return TickWatchCarrier(__instance);
+                case CameraMode.Director: return TickDirector(__instance);
                 case CameraMode.StaticPosition: return TickStaticPosition(__instance);
             }
 
@@ -528,6 +541,124 @@ public static class PatchPlayerCamera
             cam.transform.LookAt(Plugin.thirdPersonPlayerToWatch.PlayerBody.transform.position +
                                  Plugin.thirdPersonPlayerToWatch.PlayerBody.transform
                                      .TransformDirection(new Vector3(0, 0, 2)));
+            return false;
+        }
+
+        // The player who most recently touched this puck, read straight from the
+        // server-synced collision buffer (same source PuckPossessionIndicator uses).
+        // Independent of the possession-disc toggle so /wc works with it off.
+        private static Player GetPuckCarrier(Puck puck)
+        {
+            if (puck == null || puck.NetworkObjectCollisionRecorder == null) return null;
+
+            List<KeyValuePair<Player, float>> list;
+            try { list = puck.GetPlayerCollisions(); }
+            catch { return null; }
+            if (list == null || list.Count == 0) return null;
+
+            var latest = list[0];
+            for (var i = 1; i < list.Count; i++)
+                if (list[i].Value > latest.Value) latest = list[i];
+            return latest.Key;
+        }
+
+        // /wc: chase whoever currently has the puck (its most recent toucher),
+        // switching targets only after a short debounce so deflections and puck
+        // battles don't whip the camera between players every frame.
+        private static bool TickWatchCarrier(SpectatorCamera cam)
+        {
+            var puck = PuckManager.Instance != null ? PuckManager.Instance.GetPuck() : null;
+            var toucher = GetPuckCarrier(puck);
+
+            // Restart the debounce timer whenever the last-toucher changes.
+            if (toucher != carrierCandidate)
+            {
+                carrierCandidate = toucher;
+                carrierCandidateSince = Time.time;
+            }
+
+            // Commit to the candidate once it's held the puck long enough.
+            if (carrierCandidate != null && carrierCandidate != carrierToWatch &&
+                Time.time - carrierCandidateSince >= Plugin.watchCarrierSwitchHold)
+                carrierToWatch = carrierCandidate;
+
+            // Nobody to follow yet, or they despawned — let the game's camera run.
+            if (carrierToWatch == null || carrierToWatch.PlayerBody == null)
+                return true;
+
+            var body = carrierToWatch.PlayerBody.transform;
+            var offset = new Vector3(0, 3, -2);
+            var desiredPosition = body.position + body.TransformDirection(offset);
+            cam.transform.position = Vector3.Lerp(cam.transform.position, desiredPosition,
+                10f * Time.deltaTime);
+            cam.transform.LookAt(body.position + body.TransformDirection(new Vector3(0, 0, 2)));
+            return false;
+        }
+
+        // /director: autonomous hybrid broadcast camera. Smooth side-follow during
+        // open play; hard cuts to a goal cam on a score/replay and to a faceoff
+        // vantage on a faceoff. Driven purely off GameManager.Phase + puck position,
+        // so no event hooks are needed.
+        private static bool TickDirector(SpectatorCamera cam)
+        {
+            var gm = GameManager.Instance;
+            var phase = gm != null ? gm.Phase : GamePhase.Play;
+
+            var target = GetWatchTarget();
+            var puckPos = target.HasTarget ? target.Position : Vector3.zero;
+            GetRinkFraming(out _, out var iceLength, out _, out var height, out var widthPosition);
+
+            // A phase change is the only time we hard-cut; within a phase we ease.
+            var cut = phase != directorLastPhase;
+            directorLastPhase = phase;
+
+            Vector3 desiredPos;
+            Vector3 lookAt;
+            switch (phase)
+            {
+                case GamePhase.BlueScore:
+                case GamePhase.RedScore:
+                case GamePhase.Replay:
+                {
+                    // Goal cam behind the relevant net. Blue scores into the -z
+                    // net, red into the +z net; for a generic replay use the net
+                    // nearest the puck.
+                    var endZ = phase == GamePhase.RedScore ? 1f : -1f;
+                    if (phase == GamePhase.Replay && target.HasTarget)
+                        endZ = puckPos.z >= 0f ? 1f : -1f;
+                    desiredPos = new Vector3(0f, height + 2f, endZ * (iceLength + 4f));
+                    lookAt = new Vector3(0f, 1f, endZ * (iceLength - 8f));
+                    break;
+                }
+                case GamePhase.FaceOff:
+                {
+                    // Elevated vantage from the broadcast side looking at the drop.
+                    desiredPos = new Vector3(widthPosition, height + 1f, puckPos.z);
+                    lookAt = target.HasTarget ? puckPos : Vector3.zero;
+                    break;
+                }
+                default:
+                {
+                    // Open play (and any other phase): smooth side-follow that
+                    // tracks the puck down the ice from a fixed broadcast side.
+                    desiredPos = new Vector3(widthPosition, height, target.HasTarget ? puckPos.z : 0f);
+                    lookAt = target.HasTarget ? puckPos : Vector3.zero;
+                    break;
+                }
+            }
+
+            if (cut)
+            {
+                cam.transform.position = desiredPos; // hard cut
+                directorVel = Vector3.zero;
+            }
+            else
+            {
+                cam.transform.position = Vector3.SmoothDamp(cam.transform.position, desiredPos,
+                    ref directorVel, 0.5f);
+            }
+
+            cam.transform.LookAt(lookAt);
             return false;
         }
 

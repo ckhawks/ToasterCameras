@@ -25,6 +25,8 @@ public class CameraModeKeybinds
     public string watchPuckAbove { get; set; } = "";
     public string watchPuckSmart { get; set; } = "";
     public string watchPuckSmart2 { get; set; } = "";
+    public string watchCarrier { get; set; } = "";
+    public string director { get; set; } = "";
     public string watchOff { get; set; } = "";
     public string cinematicSmoothing { get; set; } = "<keyboard>/f9";
     public string slowDown { get; set; } = "<keyboard>/leftAlt";

@@ -14,6 +14,8 @@ Each of these switches your spectator camera into a mode. They're mutually exclu
 /watchpuckabove /wpa - Your camera will sit directly above the puck, but you can still move it up and down.
 /watchpucksmart /wps - Your camera will automatically shift to the corner of the rink that the puck is closest to. Fully autonomous.
 /watchpucksmart2 /wps2 /wpss - Your camera will automatically interpolate between various positions around the rink, and will cut between them. Fully autonomous.
+/watchcarrier /wc - Auto third-person chase on whichever player currently has the puck, switching as possession changes (with a short delay so it doesn't whip around on deflections). Fully autonomous.
+/director /dir - Autonomous broadcast director: smooth side-follow of the play during open play, with hard cuts to a goal cam on goals/replays and to a faceoff angle on faceoffs. Fully autonomous.
 /watchplayer [number/name] /wpl - Follow a specific player in third person. Accepts a jersey number or a username.
 /watchplayer /wpl - With no argument, clears following a specific player.
 /becomepuck /bep - Attach your camera to the puck, become the puck.
@@ -50,7 +52,7 @@ Cinematic smoothing toggle: F9 - Smooths camera position and rotation for a cine
 
 Slow down (hold): Left Alt - Hold to move the free-fly camera slowly for fine positioning. (Holding Sprint/Shift moves at 2x for fast repositioning.)
 
-The camera mode commands (become puck, become puck free look, watch puck, watch puck grid, watch puck above, watch puck smart, watch puck smart 2, watch off) are unbound by default and can be assigned keys in the settings.
+The camera mode commands (become puck, become puck free look, watch puck, watch puck grid, watch puck above, watch puck smart, watch puck smart 2, watch puck carrier, director, watch off) are unbound by default and can be assigned keys in the settings.
 
 
 CONFIGURATION

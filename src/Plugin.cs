@@ -22,6 +22,8 @@ public enum CameraMode
     WatchPuckSmart,   // corner auto-switch (/wps)
     WatchPuckSmart2,  // nearest-of-many auto-switch (/wps2)
     WatchThirdPerson, // chase a specific player (/wpl)
+    WatchCarrier,     // chase whoever currently has the puck (/wc)
+    Director,         // autonomous hybrid broadcast director (/director)
     StaticPosition,   // fixed preset position (/cpos)
 }
 
@@ -114,7 +116,13 @@ public class Plugin : IPuckPlugin
     public static InputAction watchPuckAboveAction;
     public static InputAction watchPuckSmartAction;
     public static InputAction watchPuckSmart2Action;
+    public static InputAction watchCarrierAction;
+    public static InputAction directorAction;
     public static InputAction watchOffAction;
+
+    // /wc: how long (seconds) a new player must be the puck's last-toucher before
+    // the carrier camera commits to following them. Debounces deflections/battles.
+    public static float watchCarrierSwitchHold = 0.5f;
     public static InputAction slowDownAction; // Add this line
     
     public bool OnEnable()

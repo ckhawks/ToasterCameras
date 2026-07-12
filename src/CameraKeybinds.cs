@@ -131,6 +131,8 @@ public static class CameraKeybinds
         Free(ref Plugin.watchPuckAboveAction);
         Free(ref Plugin.watchPuckSmartAction);
         Free(ref Plugin.watchPuckSmart2Action);
+        Free(ref Plugin.watchCarrierAction);
+        Free(ref Plugin.directorAction);
         Free(ref Plugin.watchOffAction);
         Free(ref Plugin.cinematicSmoothingAction);
         Free(ref Plugin.slowDownAction);
@@ -184,6 +186,20 @@ public static class CameraKeybinds
             Plugin.watchPuckSmart2Action = new InputAction(binding: modes.watchPuckSmart2);
             Plugin.watchPuckSmart2Action.Enable();
             Plugin.Log($"Registered keybind '{modes.watchPuckSmart2}' for Watch Puck Smart 2");
+        }
+
+        if (!string.IsNullOrEmpty(modes.watchCarrier))
+        {
+            Plugin.watchCarrierAction = new InputAction(binding: modes.watchCarrier);
+            Plugin.watchCarrierAction.Enable();
+            Plugin.Log($"Registered keybind '{modes.watchCarrier}' for Watch Puck Carrier");
+        }
+
+        if (!string.IsNullOrEmpty(modes.director))
+        {
+            Plugin.directorAction = new InputAction(binding: modes.director);
+            Plugin.directorAction.Enable();
+            Plugin.Log($"Registered keybind '{modes.director}' for Director");
         }
 
         if (!string.IsNullOrEmpty(modes.watchOff))
@@ -275,6 +291,16 @@ public static class CameraKeybinds
             CheckCameraModeKeybind("watchPuckSmart2", Plugin.watchPuckSmart2Action, () =>
             {
                 Plugin.SetCameraMode(CameraMode.WatchPuckSmart2);
+            });
+
+            CheckCameraModeKeybind("watchCarrier", Plugin.watchCarrierAction, () =>
+            {
+                Plugin.SetCameraMode(CameraMode.WatchCarrier);
+            });
+
+            CheckCameraModeKeybind("director", Plugin.directorAction, () =>
+            {
+                Plugin.SetCameraMode(CameraMode.Director);
             });
 
             CheckCameraModeKeybind("cinematicSmoothing", Plugin.cinematicSmoothingAction, () =>

@@ -82,6 +82,18 @@ public static class ClientChat
                 return false;
             }
 
+            if (messageParts[0].Equals("/watchcarrier", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/wc", StringComparison.OrdinalIgnoreCase))
+            {
+                Plugin.SetCameraMode(CameraMode.WatchCarrier);
+                return false;
+            }
+
+            if (messageParts[0].Equals("/director", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/dir", StringComparison.OrdinalIgnoreCase))
+            {
+                Plugin.SetCameraMode(CameraMode.Director);
+                return false;
+            }
+
             if (messageParts[0].Equals("/watchplayer", StringComparison.OrdinalIgnoreCase) || messageParts[0].Equals("/wpl", StringComparison.OrdinalIgnoreCase))
             {
                 if (messageParts.Length >= 2)
