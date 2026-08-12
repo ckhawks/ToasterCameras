@@ -224,9 +224,13 @@ public static class PuckPossessionIndicator
         }
     }
 
+    // Note the reference-null check rather than `puck == null`. Unity's overloaded
+    // == reports a destroyed object as null, and this runs from Puck.OnDestroy —
+    // so the Unity check would bail before destroying the disc and leave it
+    // stranded on the ice. Only a genuine null reference is unusable as a key.
     public static void Cleanup(Puck puck)
     {
-        if (puck == null) return;
+        if ((object)puck == null) return;
         if (indicatorMap.TryGetValue(puck, out var ind) && ind != null)
         {
             if (ind.go != null) Object.Destroy(ind.go);
@@ -246,11 +250,42 @@ public static class PuckPossessionIndicator
             if (ind?.go != null && ind.go.activeSelf) ind.go.SetActive(false);
     }
 
+    // Scratch collections for the orphan sweep, reused so the per-frame
+    // reconcile doesn't allocate.
+    private static readonly HashSet<Puck> liveSet = new();
+    private static readonly List<Puck> staleKeys = new();
+
+    // Destroy any disc whose puck is no longer a live, non-replay puck. The
+    // OnDestroy patch is the fast path, but this is the backstop: it also covers
+    // a puck flipping to replay mid-life and any despawn path that doesn't route
+    // through OnDestroy, so a disc can never outlive its puck.
+    private static void SweepOrphans(List<Puck> livePucks)
+    {
+        if (indicatorMap.Count == 0) return;
+
+        liveSet.Clear();
+        if (livePucks != null)
+            for (var i = 0; i < livePucks.Count; i++)
+                if ((object)livePucks[i] != null) liveSet.Add(livePucks[i]);
+
+        foreach (var key in indicatorMap.Keys)
+        {
+            if ((object)key == null) continue;
+            if (key == null || !liveSet.Contains(key) || (key.IsReplay != null && key.IsReplay.Value))
+                staleKeys.Add(key);
+        }
+
+        for (var i = 0; i < staleKeys.Count; i++) Cleanup(staleKeys[i]);
+        staleKeys.Clear();
+    }
+
     public static void TickAll()
     {
         if (PuckManager.Instance == null) return;
-        if (IsWarmup()) { HideAll(); return; }
         var pucks = PuckManager.Instance.GetPucks(false);
+        SweepOrphans(pucks);
+        if (!enabled) { HideAll(); return; }
+        if (IsWarmup()) { HideAll(); return; }
         if (pucks == null) return;
         for (var i = 0; i < pucks.Count; i++) Tick(pucks[i]);
     }
@@ -271,6 +306,14 @@ public static class PuckPossessionIndicatorPatches
 {
     [HarmonyPatch(typeof(Puck), "OnDestroy")]
     private class PatchPuckOnDestroy
+    {
+        private static void Prefix(Puck __instance) => PuckPossessionIndicator.Cleanup(__instance);
+    }
+
+    // Despawn fires before destruction and is the point at which the puck leaves
+    // PuckManager's list, so this is what actually retires the disc in play.
+    [HarmonyPatch(typeof(Puck), "OnNetworkDespawn")]
+    private class PatchPuckOnNetworkDespawn
     {
         private static void Prefix(Puck __instance) => PuckPossessionIndicator.Cleanup(__instance);
     }
