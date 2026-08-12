@@ -289,11 +289,18 @@ public static class PatchPlayerCamera
                 {
                     var scrollY = Mouse.current.scroll.ReadValue().y;
                     if (Mathf.Abs(scrollY) > 0.01f)
+                    {
                         // Sign only: wheel delta magnitude is platform-dependent
                         // (e.g. 120/notch on Windows), so step a fixed amount.
+                        // Scroll up = zoom in = divide the FOV down.
+                        var factor = Plugin.scrollZoomStepFactor;
+                        if (factor < 1.0001f) factor = 1.0001f;
                         Plugin.scrollZoomTargetFov = Mathf.Clamp(
-                            Plugin.scrollZoomTargetFov - Mathf.Sign(scrollY) * Plugin.scrollZoomStep,
+                            scrollY > 0f
+                                ? Plugin.scrollZoomTargetFov / factor
+                                : Plugin.scrollZoomTargetFov * factor,
                             Plugin.scrollZoomMinFov, Plugin.scrollZoomMaxFov);
+                    }
                 }
 
                 Plugin._dynamicFovCurrent = Mathf.SmoothDamp(fovCam.fieldOfView,

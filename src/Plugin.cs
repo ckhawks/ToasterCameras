@@ -92,9 +92,13 @@ public class Plugin : IPuckPlugin
     public static bool client_scrollZoomEnabled = false;
     public static bool scrollZoomNeedsInit = false;
     public static float scrollZoomTargetFov = 60f;
-    public static float scrollZoomStep = 4f;   // degrees per wheel notch
-    public static float scrollZoomMinFov = 15f;
-    public static float scrollZoomMaxFov = 90f;
+    // Multiplicative per notch, not additive: a fixed degree step feels
+    // imperceptible at the wide end and violent at the tight end. 1.1 gives
+    // even-feeling zoom across the whole range (~33 notches min to max).
+    public static float scrollZoomStepFactor = 1.1f;
+    // Unity clamps fieldOfView to 1..179; stay inside that with room to spare.
+    public static float scrollZoomMinFov = 5f;
+    public static float scrollZoomMaxFov = 120f;
     public static float scrollZoomSmoothTime = 0.12f;
     // Which preset is active while cameraMode == StaticPosition.
     public static string client_spectatorStaticPosition = "";
